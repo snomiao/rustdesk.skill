@@ -23,7 +23,7 @@ import {
   resolveBackend,
   type Box,
 } from "../src/ocr";
-import { parseKeyChord, normalizeKeyName, screenshotToCss } from "../src/rech";
+import { parseKeyChord, normalizeKeyName, rech, RechNotFoundError, screenshotToCss } from "../src/rech";
 import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
@@ -183,6 +183,20 @@ describe("type shift-warning", () => {
     try {
       expect(() => type("hello-123")).not.toThrow();
       expect(() => type("Secret@1", { force: true })).not.toThrow();
+    } finally {
+      delete process.env.RDS_RECH_BIN;
+    }
+  });
+});
+
+// --- missing rech CLI → clear actionable error (no raw stack trace) ---
+
+describe("rech backend availability", () => {
+  test("throws RechNotFoundError when the binary is missing", () => {
+    process.env.RDS_RECH_BIN = "rds-definitely-not-a-real-binary-xyz";
+    try {
+      expect(() => rech(["status"])).toThrow(RechNotFoundError);
+      expect(() => rech(["status"])).toThrow(/not found on PATH/);
     } finally {
       delete process.env.RDS_RECH_BIN;
     }

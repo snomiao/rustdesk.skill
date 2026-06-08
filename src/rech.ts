@@ -44,13 +44,25 @@ export interface RechResult {
   stderr: string;
 }
 
+/** Thrown when the `rech` CLI is not installed/available on PATH. */
+export class RechNotFoundError extends Error {}
+
 /** Run a raw rech command. Throws on non-zero unless opts.allowFail. */
 export function rech(args: string[], opts: { allowFail?: boolean } = {}): RechResult {
-  const res = spawnSync(rechBin(), args, {
+  const bin = rechBin();
+  const res = spawnSync(bin, args, {
     cwd: sessionDir(),
     encoding: "utf8",
     env: process.env,
   });
+  // ENOENT = the rech binary itself is missing. Fail with an actionable message
+  // (the browser backend is currently rech-only) instead of a raw stack trace.
+  if ((res.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+    throw new RechNotFoundError(
+      `'${bin}' CLI not found on PATH — install it (snomiao/rechrome: \`bun add -g rechrome\` then \`rech setup\`), ` +
+        `or set RDS_RECH_BIN to its path. rech is currently the only supported browser backend.`,
+    );
+  }
   const out: RechResult = {
     status: res.status ?? (res.error ? 1 : 0),
     stdout: res.stdout ?? "",

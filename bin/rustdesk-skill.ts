@@ -16,6 +16,7 @@ import * as screen from "../src/screen";
 import * as conn from "../src/connect";
 import { NoPasswordError } from "../src/passwords";
 import { ShiftMangleError } from "../src/screen";
+import { RechNotFoundError } from "../src/rech";
 import type { OcrBackend } from "../src/ocr";
 import type { Box } from "../src/ocr";
 
@@ -65,6 +66,10 @@ function guard(fn: () => void): void {
   try {
     fn();
   } catch (e) {
+    if (e instanceof RechNotFoundError) {
+      console.error(`[rustdesk-skill] ${e.message}`);
+      process.exit(5);
+    }
     if (e instanceof NoPasswordError) {
       console.error(`[rustdesk-skill] ${e.message}`);
       process.exit(3);
