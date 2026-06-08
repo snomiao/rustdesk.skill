@@ -1,0 +1,33 @@
+# deps / build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# secrets / local-only (PUBLIC REPO — never commit these)
+.env
+.env.*
+.secret-denylist
+**/passwords.json
+*.pem
+*.key
+id_rsa*
+
+# local build/handoff notes (kept out of the public repo)
+IMPL_SPEC.md
+
+# captured sessions (may contain real screens)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.webm
+.playwright-cli-multi-tab/
+screenshots/
+
+# misc
+*.log
+.DS_Store
+
+# agent-yes runtime logs
+.agent-yes/
