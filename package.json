@@ -1,0 +1,27 @@
+{
+  "name": "rustdesk-skill",
+  "version": "0.0.1",
+  "description": "winrpc-style RustDesk web connect CLI for agents (rds): Playwright-driven RustDesk web + OCR positioned-text driver for ID connect, screenshot, click-by-text, type. Complements (not replaces) the official server-only rustdesk CLI.",
+  "type": "module",
+  "bin": {
+    "rustdesk-skill": "bin/rustdesk-skill.ts",
+    "rds": "bin/rustdesk-skill.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ocr": "python3 ocr/ocr.py"
+  },
+  "keywords": ["rustdesk", "remote-desktop", "cli", "playwright", "ocr", "paddleocr", "agent", "automation"],
+  "license": "MIT",
+  "engines": { "bun": ">=1.0.0" },
+  "dependencies": {
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/yargs": "^17.0.33",
+    "bun-types": "^1.1.0",
+    "typescript": "^5.6.0"
+  }
+}
