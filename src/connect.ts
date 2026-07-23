@@ -86,6 +86,24 @@ export function passwordDialogPresent(boxes: Box[]): boolean {
 }
 
 /**
+ * Pick the password INPUT field box: mentions パスワード/password but is not the
+ * dialog title ("...必要"/"required") nor the 記憶/remember checkbox, preferring the
+ * row just below the title. Pure & unit-tested.
+ */
+export function pickPasswordField(boxes: Box[], title?: Box): Box | undefined {
+  const candidates = boxes.filter(
+    (b) =>
+      /パスワード|password/i.test(b.text) &&
+      // Exclude the title ("...必要"), the subtitle ("...確認する"), and the
+      // 記憶/remember checkbox — leaving just the input placeholder.
+      !/必要|確認|記憶|remember|required|confirm/i.test(b.text) &&
+      (!title || b.y > title.y),
+  );
+  candidates.sort((a, b) => a.y - b.y); // nearest below the title = the input row
+  return candidates[0];
+}
+
+/**
  * Handle the password dialog: click the field, type the password (local UI → no
  * mangling), optionally tick 記憶する, click OK.
  */
@@ -93,9 +111,17 @@ export function handlePasswordDialog(pw: string, remember: boolean): boolean {
   const boxes = ocr();
   if (!passwordDialogPresent(boxes)) return false;
 
-  // Focus the password input: heuristically the area under the dialog title.
-  const title = findAny(boxes, ["パスワードが必要です", "Password Required", "パスワード"]);
-  if (title) {
+  // Focus the password input. Prefer the field's own OCR box — the "パスワード" /
+  // "Password" placeholder that is NOT the dialog title ("...が必要です" /
+  // "Required") or the 記憶/remember checkbox, sitting below the title. Fall back
+  // to clicking just below the title if the field box isn't isolated. (Verified
+  // against the live dialog: the title+offset guess missed the input.)
+  const title = findAny(boxes, ["パスワードが必要です", "Password Required"]);
+  const field = pickPasswordField(boxes, title);
+  if (field) {
+    const c = boxCenter(field);
+    clickScreenshotPx(c.x, c.y);
+  } else if (title) {
     const c = boxCenter(title);
     clickScreenshotPx(c.x, c.y + Math.max(40, title.h * 2));
   }

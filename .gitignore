@@ -22,6 +22,7 @@ IMPL_SPEC.md
 *.gif
 *.mp4
 *.webm
+.playwright-cli/
 .playwright-cli-multi-tab/
 screenshots/
 

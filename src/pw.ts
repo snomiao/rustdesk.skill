@@ -119,9 +119,31 @@ export function screenshotPng(): { buf: Buffer; width: number; height: number } 
   return { buf, width, height };
 }
 
-/** Evaluate JS in the page and return trimmed stdout. */
+/**
+ * @playwright/cli's `eval` does not print the bare value — it wraps it in a report:
+ *   ### Result
+ *   <value: a JSON string, number, or pretty-printed JSON object>
+ *   ### Ran Playwright code
+ *   ```js ... ```
+ * Extract just the value block (between "### Result" and the next "###"/code fence).
+ * Falls back to the trimmed whole output if the header is absent. Pure & testable.
+ */
+export function parseEvalResult(stdout: string): string {
+  const lines = stdout.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.trim() === "### Result");
+  if (start < 0) return stdout.trim();
+  const out: string[] = [];
+  for (let j = start + 1; j < lines.length; j++) {
+    const l = lines[j];
+    if (l.startsWith("### ") || l.startsWith("```")) break;
+    out.push(l);
+  }
+  return out.join("\n").trim();
+}
+
+/** Evaluate JS in the page and return the result value (unwrapped from the report). */
 export function evalJs(js: string): string {
-  return pw(["eval", js]).stdout.trim();
+  return parseEvalResult(pw(["eval", js]).stdout);
 }
 
 /** Current CSS viewport width/height (cached per process). */

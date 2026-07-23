@@ -23,9 +23,17 @@ import {
   resolveBackend,
   type Box,
 } from "../src/ocr";
-import { parseKeyChord, normalizeKeyName, pw, PwNotFoundError, screenshotToCss } from "../src/pw";
+import {
+  parseKeyChord,
+  normalizeKeyName,
+  parseEvalResult,
+  pw,
+  PwNotFoundError,
+  screenshotToCss,
+} from "../src/pw";
 import { sanitizeSessionName, defaultSessionName, resolveSessionName } from "../src/session";
 import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
+import { pickPasswordField } from "../src/connect";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
 // --- password store ---
@@ -144,6 +152,22 @@ describe("screenshotToCss", () => {
   });
 });
 
+// --- @playwright/cli eval result unwrapping ---
+
+describe("parseEvalResult", () => {
+  test("unwraps a JSON string result", () => {
+    const out = `### Result\n"https://rustdesk.com/web/"\n### Ran Playwright code\n\`\`\`js\nawait page.evaluate('...');\n\`\`\``;
+    expect(parseEvalResult(out)).toBe('"https://rustdesk.com/web/"');
+  });
+  test("unwraps a pretty-printed JSON object result", () => {
+    const out = `### Result\n{\n  "w": 1280,\n  "h": 720\n}\n### Ran Playwright code`;
+    expect(JSON.parse(parseEvalResult(out))).toEqual({ w: 1280, h: 720 });
+  });
+  test("falls back to trimmed output when no Result header", () => {
+    expect(parseEvalResult("  raw value  ")).toBe("raw value");
+  });
+});
+
 // --- key chord parsing ---
 
 describe("parseKeyChord", () => {
@@ -162,6 +186,29 @@ describe("parseKeyChord", () => {
   test("normalizeKeyName", () => {
     expect(normalizeKeyName("esc")).toBe("Escape");
     expect(normalizeKeyName("down")).toBe("ArrowDown");
+  });
+});
+
+// --- password dialog: pick the input field (from real OCR layout) ---
+
+describe("pickPasswordField", () => {
+  const title: Box = { text: "※** パスワードが必要です", conf: 1, x: 524, y: 250, w: 228, h: 20 };
+  const boxes: Box[] = [
+    title,
+    { text: "RustDesk のパスワードを確認する", conf: 1, x: 514, y: 302, w: 248, h: 18 },
+    { text: "白 パスワード", conf: 0.5, x: 526, y: 350, w: 116, h: 22 }, // the input
+    { text: "パスワードを記憶する", conf: 1, x: 566, y: 406, w: 132, h: 14 },
+    { text: "✕ キャンセル", conf: 1, x: 546, y: 458, w: 112, h: 22 },
+    { text: "<OK", conf: 0.5, x: 690, y: 460, w: 62, h: 18 },
+  ];
+  test("picks the input, not the title/subtitle/remember", () => {
+    const f = pickPasswordField(boxes, title);
+    expect(f?.y).toBe(350);
+    expect(f?.text).toBe("白 パスワード");
+  });
+  test("skips password-mentioning boxes above the title", () => {
+    const withAbove = [{ text: "パスワード", conf: 1, x: 0, y: 100, w: 10, h: 10 }, ...boxes];
+    expect(pickPasswordField(withAbove, title)?.y).toBe(350);
   });
 });
 
