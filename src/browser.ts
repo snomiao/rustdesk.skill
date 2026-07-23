@@ -1,8 +1,10 @@
 // RustDesk-web session management on top of the @playwright/cli backend.
 //
-// IMPORTANT (session safety): only connect() may navigate. `open`/`goto` reloads
-// the page and kills any live RustDesk connection, so every other command
-// (screenshot/ocr/click/type/...) acts on the CURRENT tab with zero navigation.
+// IMPORTANT (session safety): only connect() and disconnect() may navigate.
+// `open`/`goto` reloads the page and kills any live RustDesk connection, so every
+// other command (screenshot/ocr/click/type/...) acts on the CURRENT tab with zero
+// navigation. connect() uses this to (re)open the client; disconnect() uses it to
+// intentionally drop the remote session.
 
 import { evalJs, pw } from "./pw";
 
@@ -37,4 +39,15 @@ export function ensureSession(force = false): boolean {
   const res = pw(["open", ...browserArgs, RUSTDESK_WEB_URL], { allowFail: true });
   if (res.status !== 0) pw(["goto", RUSTDESK_WEB_URL]);
   return true;
+}
+
+/**
+ * End the current remote session by reloading the RustDesk web client. The
+ * connected V2 toolbar is an icon-only Flutter overlay that OCR/DOM cannot
+ * reliably target (and Escape is forwarded into the remote), so reloading the
+ * client page is the deterministic way to drop the peer connection and return to
+ * the ID-entry home. Navigates on purpose — see the session-safety note above.
+ */
+export function reloadHome(): void {
+  pw(["goto", RUSTDESK_WEB_URL]);
 }

@@ -15,7 +15,7 @@
 // typing into it does NOT suffer the JP-layout shift mangling that the REMOTE
 // canvas does. We therefore type the password directly (no shift guard here).
 
-import { ensureSession, onRustdesk } from "./browser";
+import { ensureSession, onRustdesk, reloadHome } from "./browser";
 import { ocr } from "./screen";
 import { boxCenter, matchText, type Box } from "./ocr";
 import { clickScreenshotPx, pressKey, typeText } from "./pw";
@@ -145,12 +145,31 @@ export function handlePasswordDialog(pw: string, remember: boolean): boolean {
   return true;
 }
 
-/** Detect a connected canvas via OCR toast / absence of the dialog. Best-effort. */
+/**
+ * Is the RustDesk home / ID-entry screen on display? The connect form shows the
+ * リモートID field and the "リモートデスクトップを操作" heading; a live remote
+ * session replaces all of that with the canvas. Pure & unit-tested.
+ */
+export function homeScreenPresent(boxes: Box[]): boolean {
+  return !!findAny(boxes, [
+    "リモートID",
+    "Remote ID",
+    "リモートデスクトップ",
+    "Control Remote",
+    "Remote Desktop",
+  ]);
+}
+
+/**
+ * Best-effort "are we viewing a remote?": on rustdesk, but NOT showing the
+ * password dialog and NOT on the home/ID-entry screen. This distinguishes a live
+ * session from the home page (which is also on rustdesk with no dialog) — without
+ * it, status() reported connected:true even after a disconnect.
+ */
 export function detectConnected(): boolean {
   const boxes = ocr();
-  if (passwordDialogPresent(boxes)) return false;
-  // A connected session shows a toolbar / "接続完了"-style toast, or simply no
-  // login UI. We treat "no password dialog + on rustdesk" as connected.
+  if (passwordDialogPresent(boxes)) return false; // mid-connect
+  if (homeScreenPresent(boxes)) return false; // at ID-entry home, not connected
   return onRustdesk();
 }
 
@@ -217,16 +236,13 @@ export function status(): { onRustdesk: boolean; connected: boolean; url: string
   return { onRustdesk: on, connected: on ? detectConnected() : false, url: on ? "rustdesk.com/web" : "" };
 }
 
-/** Disconnect: press Escape / click a 切断 control if present. */
+/**
+ * Disconnect: reload the RustDesk client, deterministically dropping the remote
+ * session and returning to the ID-entry home. (The connected toolbar's disconnect
+ * button is an icon-only Flutter overlay OCR can't target — see reloadHome.)
+ */
 export function disconnect(): void {
-  const boxes = ocr();
-  const btn = findAny(boxes, ["切断", "Disconnect", "Close session"]);
-  if (btn) {
-    const c = boxCenter(btn);
-    clickScreenshotPx(c.x, c.y);
-  } else {
-    pressKey("Escape");
-  }
+  reloadHome();
 }
 
 export { getPassword };

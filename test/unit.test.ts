@@ -33,7 +33,7 @@ import {
 } from "../src/pw";
 import { sanitizeSessionName, defaultSessionName, resolveSessionName } from "../src/session";
 import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
-import { pickPasswordField } from "../src/connect";
+import { pickPasswordField, homeScreenPresent } from "../src/connect";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
 // --- password store ---
@@ -209,6 +209,26 @@ describe("pickPasswordField", () => {
   test("skips password-mentioning boxes above the title", () => {
     const withAbove = [{ text: "パスワード", conf: 1, x: 0, y: 100, w: 10, h: 10 }, ...boxes];
     expect(pickPasswordField(withAbove, title)?.y).toBe(350);
+  });
+});
+
+// --- home vs connected detection (from real OCR) ---
+
+describe("homeScreenPresent", () => {
+  test("true on the ID-entry home (リモートID field present)", () => {
+    const home: Box[] = [
+      { text: "RustDesk （Preview）", conf: 1, x: 556, y: 20, w: 168, h: 22 },
+      { text: "リモートデスクトップを操作@", conf: 1, x: 347, y: 69, w: 277, h: 27 },
+      { text: "リモートID", conf: 1, x: 358, y: 135, w: 84, h: 18 },
+    ];
+    expect(homeScreenPresent(home)).toBe(true);
+  });
+  test("false while viewing a remote (no home UI markers)", () => {
+    const remote: Box[] = [
+      { text: "組織ダッシュボード（管理者）", conf: 1, x: 357, y: 389, w: 229, h: 27 },
+      { text: "新しいタブ", conf: 1, x: 370, y: 96, w: 76, h: 20 },
+    ];
+    expect(homeScreenPresent(remote)).toBe(false);
   });
 });
 
