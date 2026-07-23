@@ -14,12 +14,15 @@ RustDesk web client V2 は **Flutter canvas**（DOM 無(な)し）なので、�
 
 ## 必要(ひつよう)なもの（Requirements）
 - **Bun**（実行(じっこう)ランタイム）
-- **`rech` CLI**（[snomiao/rechrome](https://github.com/snomiao/rechrome)）— first impl の browser backend。未(み)導入(どうにゅう)だと `rds` は明確(めいかく)なエラーで止(と)まる。
+- **`@playwright/cli`**（Microsoft 公式(こうしき)、bin 名(めい) `playwright-cli`）— browser backend。`bun add -g @playwright/cli` で導入(どうにゅう)、または `RDS_PW_BIN="bunx @playwright/cli"` で実行(じっこう)、任意(にんい)の binary を `RDS_PW_BIN` で指定(してい)も可(か)。未(み)導入(どうにゅう)だと `rds` は明確(めいかく)なエラーで止(と)まる。初回(しょかい) `open` で browser が download される場合(ばあい)あり（`RDS_PW_BROWSER=chrome` で system Chrome を使用(しよう)）。
+- **`RDS_SESSION_NAME`**（session 名(めい)・実質(じっしつ)必須(ひっす)）— 各(かく) command は名前付(なまえつ)き session（`-s=<name>`）に browser を紐付(ひもづ)け、連続(れんぞく) command が同(おな)じ tab を再利用(さいりよう)する。`./.env.local` に `RDS_SESSION_NAME=<name>` を書(か)くか inline（`RDS_SESSION_NAME=<name> rds ...`）で指定(してい)。**TTY なら** git repo/branch（無(な)ければ folder 名(めい)）を既定(きてい)値(ち)として提示(ていじ)→編集(へんしゅう)可(か)→`.env.local` に保存(ほぞん)も可(か)。非(ひ)対話(たいわ)時(じ)は既定(きてい)値(ち)を使(つか)い一行(いちぎょう) note を出(だ)す。
 - **OCR backend**（`ocr` / `click` 用(よう)）: macOS は標準(ひょうじゅん)の **Vision**（追加(ついか)不要(ふよう)）、それ以外(いがい)は **PaddleOCR**（`pip install paddleocr`、Python）。`--ocr` / `RDS_OCR` で選択(せんたく)。
 
 ## インストール
 ```bash
+bun add -g @playwright/cli                     # browser backend（未(み)導入(どうにゅう)の場合(ばあい)）
 cd rustdesk.skill && bun install && bun link   # rustdesk-skill / rds が PATH に
+echo 'RDS_SESSION_NAME=my-session' >> .env.local   # session 名(めい)を pin（任意(にんい)・TTY なら自動(じどう)提示(ていじ)）
 ```
 
 ## コマンド
@@ -51,9 +54,9 @@ RustDesk web は raw key event を転送(てんそう)する。**JP layout の r
 > 実運用(じつうんよう)メモ: clean な shell が要(い)るなら RustDesk より **Tailscale + OpenSSH**（`ssh <user>@<tailscale-ip>`）の方(ほう)が化(ば)けず・script 可(か)・elevated。この skill は **GUI/canvas 操作(そうさ)が必要(ひつよう)な場面(ばめん)**や Tailscale が無(な)い相手(あいて)向(む)け。
 
 ## アーキテクチャ（first impl）
-- **Driver = web+playwright+ocr**（pluggable。将来(しょうらい) native client driver も）。
-- Playwright 制御(せいぎょ)の Chrome → `rustdesk.com/web`（`rech` のパターン流用(りゅうよう)可(か)）。
-- canvas screenshot → OCR backend（`ocr/ocr.py` PaddleOCR、fallback `ocr/ocr-mac.py` macOS Vision）→ 位置(いち)付(つ)きテキスト JSON。
+- **Driver = web+playwright+ocr**（pluggable。将来(しょうらい) native client driver も）。backend は `@playwright/cli`（`playwright-cli`）を `src/pw.ts` で wrap。唯一(ゆいいつ)の shell out 箇所(かしょ)なので差(さ)し替(か)え容易(ようい)。
+- `@playwright/cli` 制御(せいぎょ)の Chrome → `rustdesk.com/web`。命名(めいめい) session（`-s=<name>`）で連続(れんぞく) command が同(おな)じ browser を共有(きょうゆう)。
+- canvas screenshot（`--hires` = device px）→ OCR backend（`ocr/ocr.py` PaddleOCR、fallback `ocr/ocr-mac.py` macOS Vision）→ 位置(いち)付(つ)きテキスト JSON。
 - 接続(せつぞく)フロー: リモートID 入力(にゅうりょく) → → クリック → 「パスワードが必要(ひつよう)です」ダイアログ処理(しょり)（pw type/paste・`--remember-password` なら「記憶(きおく)する」チェック・OK）。
 - パスワード保存(ほぞん): `~/.config/rustdesk-skill/passwords.json`（ID 毎(ごと)、mode 600）。
-- session: 永続(えいぞく) browser（`rds` 連続(れんぞく)コマンドが同(おな)じ接続(せつぞく)を再利用(さいりよう)）。
+- session 名(めい)解決(かいけつ): `src/session.ts`。`RDS_SESSION_NAME`（env / `.env.local`）→ TTY なら git repo/branch（無(な)ければ folder 名(めい)）を提示(ていじ)・編集(へんしゅう)・`.env.local` 保存(ほぞん)→ 非(ひ)対話(たいわ)は既定(きてい)値(ち)＋note。`RDS_SESSION_DIR` で screenshot 一時(いちじ)出力(しゅつりょく)先(さき)、`RDS_PW_BIN` で backend binary を上書(うわが)き。

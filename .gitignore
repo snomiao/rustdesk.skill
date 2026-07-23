@@ -28,6 +28,7 @@ screenshots/
 # misc
 *.log
 .DS_Store
+tmp/
 
 # agent-yes runtime logs
 .agent-yes/

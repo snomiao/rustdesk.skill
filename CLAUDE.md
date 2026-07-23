@@ -27,3 +27,5 @@ To scan for extra private strings (e.g. your org's names) without publishing the
 
 - Stack: **Bun + TypeScript**; **yargs** for all argument parsing. Code comments in English.
 - OSS-friendly: no hard dependency on private tools; any optional external helper must be documented and degrade gracefully if absent.
+- Browser backend = Microsoft's official **`@playwright/cli`** (`playwright-cli`), wrapped in `src/pw.ts` — the single shell-out choke point (a future native driver implements the same surface). Override the binary with `RDS_PW_BIN`.
+- **Session name**: every command carries `-s=<RDS_SESSION_NAME>` so repeated `rds` calls reuse one browser tab. Resolution lives in `src/session.ts`: env / `.env.local` → TTY-guided default (git repo/branch, else folder name) → non-interactive default with a note. `.env.local` is gitignored (`.env.*`).

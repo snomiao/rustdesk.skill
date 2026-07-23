@@ -8,10 +8,10 @@ import {
   moveScreenshotPx,
   pasteCtrlV,
   pressKey,
-  scroll as rechScroll,
+  scroll as pwScroll,
   screenshotPng,
   typeText,
-} from "./rech";
+} from "./pw";
 import {
   boxCenter,
   matchText,
@@ -85,7 +85,7 @@ export function move(x: number, y: number): void {
 
 /** Scroll by dy CSS px. */
 export function scroll(dy: number): void {
-  rechScroll(dy);
+  pwScroll(dy);
 }
 
 export class ShiftMangleError extends Error {}

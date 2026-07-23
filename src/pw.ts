@@ -1,76 +1,95 @@
 // Low-level browser backend.
 //
-// DESIGN CHOICE: we WRAP the existing `rech` CLI (snomiao/rechrome,
-// playwright-cli-multi-tab over an HTTP daemon) rather than embedding Playwright
-// directly. Rationale: rech already owns a persistent, authenticated Chrome
-// session pointed at https://rustdesk.com/web/, with coord mouse / type / press /
-// screenshot / eval — exactly the primitives we need. Shelling out to it is the
-// fastest correct first impl and reuses the working RustDesk-web session. A
-// future native driver can implement the same `Backend` surface.
+// DESIGN CHOICE: we WRAP Microsoft's official `@playwright/cli` (binary
+// `playwright-cli`) rather than embedding Playwright directly. It is built for
+// coding agents and exposes exactly the primitives we need — a persistent NAMED
+// session (`-s=<name>`), coord mouse / type / press / screenshot / eval — over a
+// background browser it keeps alive across separate CLI invocations. Shelling out
+// to it reuses that live, authenticated RustDesk-web tab with no embedded state of
+// our own. The whole backend is isolated here so a future native driver can offer
+// the same surface.
 //
-// rech forwards its args to playwright-cli-multi-tab. The subcommands we use:
-//   eval "<js>"                      -> run JS in the page, prints JSON/string
-//   screenshot --filename=<name>     -> downloads PNG to ./.playwright-cli-multi-tab/<name>
+// SESSION: every command carries `-s=<name>` (see src/session.ts) so repeated `rds`
+// invocations share one browser instance instead of spawning a fresh one each time.
+//
+// The @playwright/cli subcommands we use:
+//   eval "<js>"                      -> run JS in the page, prints the result
+//   screenshot --hires --filename=<abs> -> save PNG (device px via --hires)
 //   mousemove <x> <y> / mousedown / mouseup / mousewheel <dx> <dy>
 //   type "<text>" / press <Key> / keydown <Key> / keyup <Key>
 //   goto <url> / open <url>          -> NAVIGATES (only connect may call these)
 //
-// COORDINATE INVARIANT: playwright mouse.* uses CSS px; screenshot outputs device
-// px (= CSS px * devicePixelRatio). On retina Macs DPR=2, so they differ. We make
-// SCREENSHOT PX the one canonical space (what OCR sees and what click-xy accepts)
-// and convert to CSS px in exactly ONE place: moveScreenshotPx(). Never mix them.
+// COORDINATE INVARIANT: playwright mouse.* uses CSS px; `screenshot --hires` outputs
+// device px (= CSS px * devicePixelRatio). On retina Macs DPR=2, so they differ. We
+// make SCREENSHOT PX the one canonical space (what OCR sees and what click-xy
+// accepts) and convert to CSS px in exactly ONE place: moveScreenshotPx(). Never mix
+// them. (Passing --hires keeps this identical to the previous device-px behavior.)
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// Read at call time (not module load) so tests can stub via RDS_RECH_BIN.
-function rechBin(): string {
-  return process.env.RDS_RECH_BIN || "rech";
+import { resolveSessionName } from "./session";
+
+// Read at call time (not module load) so tests can stub via RDS_PW_BIN. The value
+// is whitespace-split so it may carry leading args, e.g. RDS_PW_BIN="bunx @playwright/cli".
+function pwCmd(): { cmd: string; prefix: string[] } {
+  const raw = process.env.RDS_PW_BIN?.trim();
+  if (raw) {
+    const parts = raw.split(/\s+/);
+    return { cmd: parts[0], prefix: parts.slice(1) };
+  }
+  return { cmd: "playwright-cli", prefix: [] };
 }
 
-// We run rech from a stable cwd so screenshot downloads land predictably in
-// <sessionDir>/.playwright-cli-multi-tab/.
+// We run the backend from a stable cwd and hand screenshots an absolute --filename,
+// so downloads land in <sessionDir>/rds-shot.png regardless of the caller's cwd.
 function sessionDir(): string {
   const d = process.env.RDS_SESSION_DIR || join(tmpdir(), "rustdesk-skill");
   if (!existsSync(d)) mkdirSync(d, { recursive: true });
   return d;
 }
 
-export interface RechResult {
+export interface PwResult {
   status: number;
   stdout: string;
   stderr: string;
 }
 
-/** Thrown when the `rech` CLI is not installed/available on PATH. */
-export class RechNotFoundError extends Error {}
+/** Thrown when the `playwright-cli` (@playwright/cli) binary is not available. */
+export class PwNotFoundError extends Error {}
 
-/** Run a raw rech command. Throws on non-zero unless opts.allowFail. */
-export function rech(args: string[], opts: { allowFail?: boolean } = {}): RechResult {
-  const bin = rechBin();
-  const res = spawnSync(bin, args, {
+/**
+ * Run a raw @playwright/cli command, scoped to the resolved session. Throws on
+ * non-zero unless opts.allowFail.
+ */
+export function pw(args: string[], opts: { allowFail?: boolean } = {}): PwResult {
+  const { cmd, prefix } = pwCmd();
+  const session = resolveSessionName();
+  const full = [...prefix, `-s=${session}`, ...args];
+  const res = spawnSync(cmd, full, {
     cwd: sessionDir(),
     encoding: "utf8",
     env: process.env,
   });
-  // ENOENT = the rech binary itself is missing. Fail with an actionable message
-  // (the browser backend is currently rech-only) instead of a raw stack trace.
+  // ENOENT = the binary itself is missing. Fail with an actionable message
+  // (the browser backend is @playwright/cli-only) instead of a raw stack trace.
   if ((res.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
-    throw new RechNotFoundError(
-      `'${bin}' CLI not found on PATH — install it (snomiao/rechrome: \`bun add -g rechrome\` then \`rech setup\`), ` +
-        `or set RDS_RECH_BIN to its path. rech is currently the only supported browser backend.`,
+    throw new PwNotFoundError(
+      `'${cmd}' not found on PATH — install @playwright/cli (\`bun add -g @playwright/cli\`), ` +
+        `run it via \`RDS_PW_BIN="bunx @playwright/cli"\`, or set RDS_PW_BIN to its path. ` +
+        `First launch may download a browser; set RDS_PW_BROWSER=chrome to use system Chrome instead.`,
     );
   }
-  const out: RechResult = {
+  const out: PwResult = {
     status: res.status ?? (res.error ? 1 : 0),
     stdout: res.stdout ?? "",
     stderr: res.stderr ?? "",
   };
   if (!opts.allowFail && out.status !== 0) {
     throw new Error(
-      `rech ${args[0]} failed (exit ${out.status}): ${out.stderr || out.stdout || res.error?.message || "unknown error"}`,
+      `playwright-cli ${args[0]} failed (exit ${out.status}): ${out.stderr || out.stdout || res.error?.message || "unknown error"}`,
     );
   }
   return out;
@@ -85,13 +104,16 @@ export function pngSize(buf: Buffer): { width: number; height: number } {
 
 /**
  * Take a screenshot of the current tab (NO navigation) and return the PNG bytes
- * plus its pixel dimensions (screenshot-px space).
+ * plus its pixel dimensions (screenshot-px space). --hires => device px.
  */
 export function screenshotPng(): { buf: Buffer; width: number; height: number } {
-  const name = "rds-shot.png";
-  rech(["screenshot", `--filename=${name}`]);
-  const p = join(sessionDir(), ".playwright-cli-multi-tab", name);
-  if (!existsSync(p)) throw new Error(`screenshot not found at ${p}`);
+  const abs = join(sessionDir(), "rds-shot.png");
+  pw(["screenshot", "--hires", `--filename=${abs}`]);
+  // Be tolerant about where the file landed: honor the absolute path first, then a
+  // couple of likely fallbacks in case the CLI writes basename-relative.
+  const candidates = [abs, join(process.cwd(), "rds-shot.png"), join(sessionDir(), "rds-shot.png")];
+  const p = candidates.find((c) => existsSync(c));
+  if (!p) throw new Error(`screenshot not found (looked in: ${candidates.join(", ")})`);
   const buf = readFileSync(p);
   const { width, height } = pngSize(buf);
   return { buf, width, height };
@@ -99,7 +121,7 @@ export function screenshotPng(): { buf: Buffer; width: number; height: number } 
 
 /** Evaluate JS in the page and return trimmed stdout. */
 export function evalJs(js: string): string {
-  return rech(["eval", js]).stdout.trim();
+  return pw(["eval", js]).stdout.trim();
 }
 
 /** Current CSS viewport width/height (cached per process). */
@@ -140,39 +162,39 @@ export function moveScreenshotPx(sx: number, sy: number): void {
   const { width, height } = screenshotPng();
   const vp = viewport();
   const { x, y } = screenshotToCss(sx, sy, width, height, vp.w || width, vp.h || height);
-  rech(["mousemove", String(x), String(y)]);
+  pw(["mousemove", String(x), String(y)]);
 }
 
 /** Click at a SCREENSHOT-px coordinate. */
 export function clickScreenshotPx(sx: number, sy: number): void {
   moveScreenshotPx(sx, sy);
-  rech(["mousedown"]);
-  rech(["mouseup"]);
+  pw(["mousedown"]);
+  pw(["mouseup"]);
 }
 
 /** Scroll by dy CSS px at the current pointer position. */
 export function scroll(dy: number): void {
-  rech(["mousewheel", "0", String(dy)]);
+  pw(["mousewheel", "0", String(dy)]);
 }
 
 /** Type text into the focused field (no shift-mangling protection here — caller decides). */
 export function typeText(text: string): void {
-  rech(["type", text]);
+  pw(["type", text]);
 }
 
 /** Press a single key chord, e.g. "Enter" or "ctrl+c". */
 export function pressKey(chord: string): void {
   const { key, mods } = parseKeyChord(chord);
-  for (const m of mods) rech(["keydown", m]);
-  rech(["press", key]);
-  for (const m of mods.slice().reverse()) rech(["keyup", m]);
+  for (const m of mods) pw(["keydown", m]);
+  pw(["press", key]);
+  for (const m of mods.slice().reverse()) pw(["keyup", m]);
 }
 
 /** Send Ctrl+V (paste on the Windows remote — NOT Cmd+V). */
 export function pasteCtrlV(): void {
-  rech(["keydown", "Control"]);
-  rech(["press", "v"]);
-  rech(["keyup", "Control"]);
+  pw(["keydown", "Control"]);
+  pw(["press", "v"]);
+  pw(["keyup", "Control"]);
 }
 
 const MOD_MAP: Record<string, string> = {

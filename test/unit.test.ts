@@ -1,5 +1,5 @@
 // Unit tests for rustdesk-skill. Mock-free where possible (pure functions);
-// the rech boundary is stubbed via RDS_RECH_BIN=true for the few impure paths.
+// the @playwright/cli boundary is stubbed via RDS_PW_BIN=true for the few impure paths.
 //
 // PUBLIC repo: fixtures use placeholder ids/passwords only — no real secrets.
 
@@ -23,7 +23,8 @@ import {
   resolveBackend,
   type Box,
 } from "../src/ocr";
-import { parseKeyChord, normalizeKeyName, rech, RechNotFoundError, screenshotToCss } from "../src/rech";
+import { parseKeyChord, normalizeKeyName, pw, PwNotFoundError, screenshotToCss } from "../src/pw";
+import { sanitizeSessionName, defaultSessionName, resolveSessionName } from "../src/session";
 import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
@@ -174,32 +175,64 @@ describe("type shift-warning", () => {
   });
 
   test("type refuses shift chars without --force", () => {
-    // typeText is never reached on the refusal path, so no rech spawn happens.
+    // typeText is never reached on the refusal path, so no pw spawn happens.
     expect(() => type("Secret@1")).toThrow(ShiftMangleError);
   });
 
-  test("type allows lowercase/digits (rech stubbed)", () => {
-    process.env.RDS_RECH_BIN = "true"; // /usr/bin/true — succeeds, no-op
+  test("type allows lowercase/digits (pw stubbed)", () => {
+    process.env.RDS_PW_BIN = "true"; // /usr/bin/true — succeeds, no-op
+    process.env.RDS_SESSION_NAME = "test-session";
     try {
       expect(() => type("hello-123")).not.toThrow();
       expect(() => type("Secret@1", { force: true })).not.toThrow();
     } finally {
-      delete process.env.RDS_RECH_BIN;
+      delete process.env.RDS_PW_BIN;
+      delete process.env.RDS_SESSION_NAME;
     }
   });
 });
 
-// --- missing rech CLI → clear actionable error (no raw stack trace) ---
+// --- missing @playwright/cli → clear actionable error (no raw stack trace) ---
 
-describe("rech backend availability", () => {
-  test("throws RechNotFoundError when the binary is missing", () => {
-    process.env.RDS_RECH_BIN = "rds-definitely-not-a-real-binary-xyz";
+describe("pw backend availability", () => {
+  test("throws PwNotFoundError when the binary is missing", () => {
+    process.env.RDS_PW_BIN = "rds-definitely-not-a-real-binary-xyz";
+    process.env.RDS_SESSION_NAME = "test-session";
     try {
-      expect(() => rech(["status"])).toThrow(RechNotFoundError);
-      expect(() => rech(["status"])).toThrow(/not found on PATH/);
+      expect(() => pw(["status"])).toThrow(PwNotFoundError);
+      expect(() => pw(["status"])).toThrow(/not found on PATH/);
     } finally {
-      delete process.env.RDS_RECH_BIN;
+      delete process.env.RDS_PW_BIN;
+      delete process.env.RDS_SESSION_NAME;
     }
+  });
+});
+
+// --- session name resolution ---
+
+describe("session name", () => {
+  test("sanitize keeps safe chars, collapses the rest", () => {
+    expect(sanitizeSessionName("my repo/feature #1")).toBe("my-repo-feature-1");
+    expect(sanitizeSessionName("  --Foo.Bar_baz--  ")).toBe("Foo.Bar_baz");
+  });
+
+  test("env RDS_SESSION_NAME wins and is sanitized", () => {
+    process.env.RDS_SESSION_NAME = "My Proj/Main";
+    try {
+      expect(resolveSessionName()).toBe("My-Proj-Main");
+    } finally {
+      delete process.env.RDS_SESSION_NAME;
+    }
+  });
+
+  test("default is derived from git/cwd (non-empty in this repo)", () => {
+    expect(defaultSessionName().length).toBeGreaterThan(0);
+  });
+
+  test("non-interactive resolve falls back to a default (no throw) when unset", () => {
+    delete process.env.RDS_SESSION_NAME;
+    // bun test runs non-interactively, so this returns the derived default.
+    expect(resolveSessionName().length).toBeGreaterThan(0);
   });
 });
 

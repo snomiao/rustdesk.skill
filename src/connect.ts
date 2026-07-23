@@ -18,7 +18,7 @@
 import { ensureSession, onRustdesk } from "./browser";
 import { ocr } from "./screen";
 import { boxCenter, matchText, type Box } from "./ocr";
-import { clickScreenshotPx, pressKey, typeText } from "./rech";
+import { clickScreenshotPx, pressKey, typeText } from "./pw";
 import {
   getPassword,
   loadPasswords,

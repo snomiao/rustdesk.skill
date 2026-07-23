@@ -12,7 +12,8 @@ rds click "OK"                                        # click by text
 ```
 
 - **Usage / commands**: see [SKILL.md](./SKILL.md)
-- **Implementation spec** (status: DRAFT → being implemented): see [IMPL_SPEC.md](./IMPL_SPEC.md)
+- **Browser backend**: [`@playwright/cli`](https://www.npmjs.com/package/@playwright/cli) (Microsoft's official CLI). Install once with `bun add -g @playwright/cli`, or run via `RDS_PW_BIN="bunx @playwright/cli"`, or point `RDS_PW_BIN` at any binary.
+- **Session name** (required): each command scopes its browser to a named session so repeated commands reuse one tab. Set `RDS_SESSION_NAME` in `./.env.local` or inline (`RDS_SESSION_NAME=<name> rds ...`). In an interactive terminal, `rds` offers a default from your git repo/branch (falling back to the folder name), lets you edit it, and can save it to `.env.local`.
 - ⚠️ **Keyboard caveat**: RustDesk web mangles shift-chars on a JP-layout remote (`@`→`2`, `+`→`=`, capitals→lowercase). For clean shell access prefer **Tailscale + SSH**; this tool is for GUI/canvas interaction. See SKILL.md.
 
 OCR backends in `ocr/` are adapted from `pkgs/winrpc/` (PaddleOCR + macOS Vision).

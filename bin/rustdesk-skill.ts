@@ -5,7 +5,7 @@
 // Subcommands (see SKILL.md): connect|c, screenshot|ss, ocr, click, click-xy,
 // move, scroll, type, key, paste, status, disconnect, list.
 //
-// Browser backend = wrap `rech` (see src/rech.ts for the design rationale).
+// Browser backend = wrap `@playwright/cli` (see src/pw.ts for the design rationale).
 // Arg parsing is yargs (kept from the scaffold). Command actions are injected via
 // `deps` so dispatch/parsing can be unit-tested without touching the backend.
 
@@ -16,7 +16,8 @@ import * as screen from "../src/screen";
 import * as conn from "../src/connect";
 import { NoPasswordError } from "../src/passwords";
 import { ShiftMangleError } from "../src/screen";
-import { RechNotFoundError } from "../src/rech";
+import { PwNotFoundError } from "../src/pw";
+import { SessionNameError } from "../src/session";
 import type { OcrBackend } from "../src/ocr";
 import type { Box } from "../src/ocr";
 
@@ -66,9 +67,13 @@ function guard(fn: () => void): void {
   try {
     fn();
   } catch (e) {
-    if (e instanceof RechNotFoundError) {
+    if (e instanceof PwNotFoundError) {
       console.error(`[rustdesk-skill] ${e.message}`);
       process.exit(5);
+    }
+    if (e instanceof SessionNameError) {
+      console.error(`[rustdesk-skill] ${e.message}`);
+      process.exit(6);
     }
     if (e instanceof NoPasswordError) {
       console.error(`[rustdesk-skill] ${e.message}`);
