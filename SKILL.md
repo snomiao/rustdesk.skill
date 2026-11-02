@@ -58,5 +58,6 @@ RustDesk web は raw key event を転送(てんそう)する。**JP layout の r
 - `@playwright/cli` 制御(せいぎょ)の Chrome → `rustdesk.com/web`。命名(めいめい) session（`-s=<name>`）で連続(れんぞく) command が同(おな)じ browser を共有(きょうゆう)。
 - canvas screenshot（`--hires` = device px）→ OCR backend（`ocr/ocr.py` PaddleOCR、fallback `ocr/ocr-mac.py` macOS Vision）→ 位置(いち)付(つ)きテキスト JSON。
 - 接続(せつぞく)フロー: リモートID 入力(にゅうりょく) → → クリック → 「パスワードが必要(ひつよう)です」ダイアログ処理(しょり)（pw type/paste・`--remember-password` なら「記憶(きおく)する」チェック・OK）。
+- connect は**検証(けんしょう)してから成功(せいこう)を報告(ほうこく)**する: pw 入力(にゅうりょく)後(ご)に OCR でフィールドが埋(う)まった（placeholder 消失(しょうしつ)／伏字(ふせじ)）ことを確認(かくにん)（1 回(かい) retry）、OK 後(ご)はダイアログが閉(と)じるまで待(ま)つ。`note` は `password accepted` / `password NOT entered ...` / `password submitted but NOT accepted ...` / `no password dialog observed`。失敗(しっぱい)時(じ)は `ok: false`・**exit 7**、`--remember-password` でも pw は保存(ほぞん)しない。
 - パスワード保存(ほぞん): `~/.config/rustdesk-skill/passwords.json`（ID 毎(ごと)、mode 600）。
 - session 名(めい)解決(かいけつ): `src/session.ts`。`RDS_SESSION_NAME`（env / `.env.local`）→ TTY なら git repo/branch（無(な)ければ folder 名(めい)）を提示(ていじ)・編集(へんしゅう)・`.env.local` 保存(ほぞん)→ 非(ひ)対話(たいわ)は既定(きてい)値(ち)＋note。`RDS_SESSION_DIR` で screenshot 一時(いちじ)出力(しゅつりょく)先(さき)、`RDS_PW_BIN` で backend binary を上書(うわが)き。
