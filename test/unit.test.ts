@@ -33,7 +33,7 @@ import {
 } from "../src/pw";
 import { sanitizeSessionName, defaultSessionName, resolveSessionName } from "../src/session";
 import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
-import { pickPasswordField, homeScreenPresent } from "../src/connect";
+import { pickPasswordField, homeScreenPresent, passwordFieldFilled, passwordRejected } from "../src/connect";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
 // --- password store ---
@@ -209,6 +209,32 @@ describe("pickPasswordField", () => {
   test("skips password-mentioning boxes above the title", () => {
     const withAbove = [{ text: "パスワード", conf: 1, x: 0, y: 100, w: 10, h: 10 }, ...boxes];
     expect(pickPasswordField(withAbove, title)?.y).toBe(350);
+  });
+});
+
+// --- password dialog: verify the field was actually filled (issue #1) ---
+
+describe("passwordFieldFilled / passwordRejected", () => {
+  const title: Box = { text: "※** パスワードが必要です", conf: 1, x: 524, y: 250, w: 228, h: 20 };
+  const rest: Box[] = [
+    { text: "RustDesk のパスワードを確認する", conf: 1, x: 514, y: 302, w: 248, h: 18 },
+    { text: "パスワードを記憶する", conf: 1, x: 566, y: 406, w: 132, h: 14 },
+    { text: "<OK", conf: 0.5, x: 690, y: 460, w: 62, h: 18 },
+  ];
+  const placeholder: Box = { text: "白 パスワード", conf: 0.5, x: 526, y: 350, w: 116, h: 22 };
+  test("empty field (placeholder visible) is NOT filled", () => {
+    expect(passwordFieldFilled([title, placeholder, ...rest], title)).toBe(false);
+  });
+  test("mask dots mean filled", () => {
+    const dots: Box = { text: "●●●●●●●●", conf: 0.8, x: 526, y: 350, w: 116, h: 22 };
+    expect(passwordFieldFilled([title, dots, ...rest], title)).toBe(true);
+  });
+  test("placeholder gone means filled", () => {
+    expect(passwordFieldFilled([title, ...rest], title)).toBe(true);
+  });
+  test("wrong-password message is detected", () => {
+    expect(passwordRejected([title, { text: "Wrong Password", conf: 1, x: 0, y: 0, w: 1, h: 1 }])).toBe(true);
+    expect(passwordRejected([title, placeholder, ...rest])).toBe(false);
   });
 });
 
