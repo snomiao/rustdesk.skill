@@ -34,9 +34,9 @@ echo 'RDS_SESSION_NAME=my-session' >> .env.local   # session 名(めい)を pin�
 | `rds click "<text>" [--nth N]` | | OCR で `<text>` を探(さが)し中心(ちゅうしん)をクリック。 |
 | `rds click-xy <x> <y>` | | canvas 上(じょう)の絶対(ぜったい)座標(ざひょう)クリック。 |
 | `rds move <x> <y>` / `rds scroll <dy>` | | ポインタ操作(そうさ)。 |
-| `rds type "<text>"` | | focus 中(ちゅう)のフィールドに型(かた)入力(にゅうりょく)。⚠️ 下記(かき) Keyboard caveat。 |
+| `rds type "<text>" [--force] [--no-verify]` | | focus 中(ちゅう)のフィールドに型(かた)入力(にゅうりょく)。入力(にゅうりょく)前後(ぜんご)を OCR し、テキストが画面(がめん)に出(で)なければ **exit 8**（伏字(ふせじ)欄(らん)は `--no-verify`）。⚠️ 下記(かき) Keyboard caveat。 |
 | `rds key <key>[+<mod>...]` | | キー押下(おうか)（`Enter` / `Escape` / `ctrl+c` 等(とう)）。 |
-| `rds paste "<text>"` | | clipboard 経由(けいゆ)貼(は)り付(つ)け（mangling 回避(かいひ)、sync が効(き)く場合(ばあい)）。 |
+| `rds paste "<text>" [--no-verify]` | | clipboard 経由(けいゆ)貼(は)り付(つ)け（mangling 回避(かいひ)、sync が効(き)く場合(ばあい)）。`type` 同様(どうよう) OCR 検証(けんしょう)・未(み)確認(かくにん)なら exit 8。 |
 | `rds status` / `rds disconnect` / `rds list` | | 接続(せつぞく)状態(じょうたい) / 切断(せつだん) / 最近(さいきん)の ID。 |
 
 ## 例(れい)
@@ -50,6 +50,8 @@ rds click-xy 685 315 && rds type "hello"              # 座標(ざひょう)ク�
 
 ## ⚠️ Keyboard caveat（重要(じゅうよう)）
 RustDesk web は raw key event を転送(てんそう)する。**JP layout の remote では Shift が落(お)ちる**ため `@`→`2` / `+`→`=` / `/`→`*` / 大文字(おおもじ)→小文字(こもじ) / quotes が化(ば)ける。よって `rds type` が確実(かくじつ)なのは **lowercase・数字(すうじ)・`-`・`.`・`/`（unshifted）** のみ。パスワード等(とう)の特殊(とくしゅ)文字(もじ)は (a) `rds paste`（clipboard sync が効(き)けば）、(b) **SSH/Tailscale 等(とう)の clean channel** を推奨(すいしょう)。CLI は shift 必須(ひっす)文字(もじ)を含(ふく)む `type` 入力(にゅうりょく)を**警告(けいこく)**する。
+
+> ⚠️ 既知(きち)の制限(せいげん)（#4）: 接続(せつぞく)後(ご)の remote desktop へは **key event（`Enter` 等(とう)）は届(とど)くが text 入力(にゅうりょく)が届(とど)かない**ことがある。`type`/`paste` は OCR で着地(ちゃくち)を検証(けんしょう)し、見(み)えなければ exit 8 で失敗(しっぱい)を報告(ほうこく)する（黙(だま)って成功(せいこう)扱(あつか)いしない）。現状(げんじょう) `rds` は**画面(がめん)を見(み)る・クリックする**用途(ようと)は確実(かくじつ)だが、**remote にコマンドを打(う)ち込(こ)む**用途(ようと)は不安定(ふあんてい)。
 
 > 実運用(じつうんよう)メモ: clean な shell が要(い)るなら RustDesk より **Tailscale + OpenSSH**（`ssh <user>@<tailscale-ip>`）の方(ほう)が化(ば)けず・script 可(か)・elevated。この skill は **GUI/canvas 操作(そうさ)が必要(ひつよう)な場面(ばめん)**や Tailscale が無(な)い相手(あいて)向(む)け。
 
