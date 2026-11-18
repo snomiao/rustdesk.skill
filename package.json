@@ -8,13 +8,24 @@
     "rds": "bin/rustdesk-skill.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsrs --noEmit",
     "test": "bun test",
     "ocr": "python3 ocr/ocr.py"
   },
-  "keywords": ["rustdesk", "remote-desktop", "cli", "playwright", "ocr", "paddleocr", "agent", "automation"],
+  "keywords": [
+    "rustdesk",
+    "remote-desktop",
+    "cli",
+    "playwright",
+    "ocr",
+    "paddleocr",
+    "agent",
+    "automation"
+  ],
   "license": "MIT",
-  "engines": { "bun": ">=1.0.0" },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "dependencies": {
     "yargs": "^17.7.2"
   },
@@ -22,6 +33,6 @@
     "@types/node": "^22.0.0",
     "@types/yargs": "^17.0.33",
     "bun-types": "^1.1.0",
-    "typescript": "^5.6.0"
+    "tsrs": "0.25.0-ts7.1.0-beta"
   }
 }
