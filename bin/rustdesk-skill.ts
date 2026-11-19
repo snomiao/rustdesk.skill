@@ -15,7 +15,7 @@ import { hideBin } from "yargs/helpers";
 import * as screen from "../src/screen";
 import * as conn from "../src/connect";
 import { NoPasswordError } from "../src/passwords";
-import { ShiftMangleError } from "../src/screen";
+import { ShiftMangleError, UnverifiedInputError } from "../src/screen";
 import { PwNotFoundError } from "../src/pw";
 import { SessionNameError } from "../src/session";
 import type { OcrBackend } from "../src/ocr";
@@ -36,9 +36,9 @@ export interface CliDeps {
   clickXY: (x: number, y: number) => void;
   move: (x: number, y: number) => void;
   scroll: (dy: number) => void;
-  type: (text: string, o: { force?: boolean }) => void;
+  type: (text: string, o: { force?: boolean; verify?: boolean }) => void;
   key: (chord: string) => void;
-  paste: (text: string) => void;
+  paste: (text: string, o: { verify?: boolean }) => void;
 }
 
 const realDeps: CliDeps = {
@@ -78,6 +78,10 @@ function guard(fn: () => void): void {
     if (e instanceof NoPasswordError) {
       console.error(`[rustdesk-skill] ${e.message}`);
       process.exit(3);
+    }
+    if (e instanceof UnverifiedInputError) {
+      // The explanation was already printed to stderr by screen.type()/paste().
+      process.exit(8);
     }
     if (e instanceof ShiftMangleError) {
       // The warning was already printed to stderr by screen.type().
@@ -195,8 +199,9 @@ export function buildParser(argv: string[], deps: CliDeps = realDeps) {
       (y) =>
         y
           .positional("text", { type: "string" })
-          .option("force", { type: "boolean", default: false, describe: "Type shift-chars anyway" }),
-      (a) => guard(() => deps.type(String(a.text), { force: a.force as boolean })),
+          .option("force", { type: "boolean", default: false, describe: "Type shift-chars anyway" })
+          .option("verify", { type: "boolean", default: true, describe: "OCR-check the text landed (--no-verify for masked fields)" }),
+      (a) => guard(() => deps.type(String(a.text), { force: a.force as boolean, verify: a.verify as boolean })),
     )
     .command(
       "key <key>",
@@ -207,8 +212,11 @@ export function buildParser(argv: string[], deps: CliDeps = realDeps) {
     .command(
       "paste <text>",
       "Set clipboard + Ctrl+V (mangling workaround)",
-      (y) => y.positional("text", { type: "string" }),
-      (a) => guard(() => deps.paste(String(a.text))),
+      (y) =>
+        y
+          .positional("text", { type: "string" })
+          .option("verify", { type: "boolean", default: true, describe: "OCR-check the text landed (--no-verify for masked fields)" }),
+      (a) => guard(() => deps.paste(String(a.text), { verify: a.verify as boolean })),
     )
     .command("status", "Connection status", () => {}, () => guard(() => printJson(deps.status())))
     .command("disconnect", "Disconnect", () => {}, () =>

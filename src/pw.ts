@@ -199,6 +199,11 @@ export function scroll(dy: number): void {
   pw(["mousewheel", "0", String(dy)]);
 }
 
+/** Blocking sleep (each rds command is a short-lived sync process). */
+export function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 /** Type text into the focused field (no shift-mangling protection here — caller decides). */
 export function typeText(text: string): void {
   pw(["type", text]);
