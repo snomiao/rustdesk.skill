@@ -1,0 +1,56 @@
+# Builds the Rust `rustdesk-skill` binary for every platform, packs it together
+# with the TypeScript the package ships, and checks on Linux, macOS and
+# Windows (x64 and arm64) that `bun i -g` / `npm i -g` gives working
+# `rustdesk-skill` and `rds` commands.
+#
+# Nothing is ported yet: the binary hands every command to
+# bin/rustdesk-skill.ts, and the smoke lines marked [handback] check on every
+# platform that it did. They run only `--help` and usage errors, which yargs
+# answers before any command starts a browser.
+#
+# It does not publish.
+#
+# The pipeline lives in https://github.com/snomiao/rustify.
+
+name: rust-npm-release
+
+on:
+  pull_request:
+    # The TypeScript is listed too: once a `parity:` test exists, a change on
+    # either side has to rerun it.
+    paths:
+      - "rs/**"
+      - "**.ts"
+      - "**.tsx"
+      - "**.mts"
+      - "**.cts"
+      - "**.js"
+      - "**.jsx"
+      - "**.mjs"
+      - "**.cjs"
+      - "package.json"
+      - ".github/workflows/rust-npm-release.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without a leading v (default: the version in rs/Cargo.toml)"
+        required: false
+        type: string
+
+jobs:
+  build:
+    uses: snomiao/rustify/.github/workflows/rust-npm-build.yml@releases/v1
+    with:
+      manifest: rs/Cargo.toml
+      bins: rustdesk-skill
+      version: ${{ inputs.version }}
+      # Both commands are the same binary, and it hands everything to
+      # bin/rustdesk-skill.ts. (--version is no use as the check: installed
+      # with bun, yargs cannot find the package and prints "unknown".)
+      smoke: rustdesk-skill --help
+      smoke-expect: Recent remote IDs
+      smoke-extra: |
+        [handback] rds --help => Recent remote IDs
+        [handback] rds connect --help => --remember-password
+        [1] [handback] rds => Not enough non-option arguments
+        [1] [handback] rds no-such-command => Unknown argument: no-such-command
