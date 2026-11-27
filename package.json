@@ -34,5 +34,13 @@
     "@types/yargs": "^17.0.33",
     "bun-types": "^1.1.0",
     "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "rustify": {
+    "mode": "hybrid",
+    "bins": {
+      "rds": "rustdesk-skill",
+      "rustdesk-skill": "rustdesk-skill"
+    },
+    "rootEnv": "RUSTDESK_SKILL_PACKAGE_ROOT"
   }
 }
