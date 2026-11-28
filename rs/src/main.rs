@@ -6,6 +6,12 @@
 //! still ships, so nothing changes for users.
 
 mod js_fallback;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
+mod js;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
+mod json;
 
 /// The package's JavaScript entry, relative to the package root.
 const JS_ENTRY: &str = "bin/rustdesk-skill.ts";
