@@ -9,7 +9,14 @@
 //!   ones `lowercase_unsure` hands back;
 //! - `os.tmpdir()` under the variables it reads;
 //! - `String(x)`, `x.toFixed(2)` and `Math.round(x)` for numbers of the kinds
-//!   OCR and coordinates give.
+//!   OCR and coordinates give;
+//! - and for what connect answers after it has acted, where it can no longer
+//!   hand back: `String(x)` for every kind of double, `Number(s)` of
+//!   strings, `Number(v)` of JSON values, src/ocr.ts `normalizeBoxes` and
+//!   `matchText` themselves on generated OCR output, the order
+//!   `(a, b) => a.y - b.y` sorts NaN and infinities in, and the fixed texts
+//!   connect looks for found among the scripts whose lower case is not
+//!   certain.
 //!
 //! These need bun and the package's node_modules (`bun install`), as the
 //! parity cases do. bun runs in a directory of its own, with HOME there.
@@ -223,4 +230,270 @@ fn numbers_as_bun_writes_them() {
         }
     }
     assert!(checked > 3000, "{checked}");
+}
+
+// ── what connect answers after it has acted ─────────────────────────────────
+
+/// A small deterministic generator, so that every run tries the same inputs.
+struct Dice(u64);
+
+impl Dice {
+    fn next(&mut self) -> u64 {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
+
+    fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
+        &items[self.below(items.len())]
+    }
+}
+
+fn json_list<T: AsRef<str>>(items: &[T]) -> String {
+    format!("[{}]", items.iter().map(|t| crate::js::json_string(t.as_ref())).collect::<Vec<_>>().join(",\n"))
+}
+
+/// `String(x)`, with -0 as such.
+fn shown(x: f64) -> String {
+    if x == 0.0 && x.is_sign_negative() {
+        "-0".into()
+    } else {
+        crate::js::number_exact(x)
+    }
+}
+
+fn answers(name: &str, mode: &str, items: &[String]) -> Vec<String> {
+    let scratch = Scratch::new(name);
+    let file = scratch.0.join("items.json");
+    std::fs::write(&file, json_list(items)).unwrap();
+    let out = bun(&scratch.0, &[mode, file.to_str().unwrap()], &[]);
+    let lines: Vec<String> = out.lines().map(String::from).collect();
+    assert_eq!(lines.len(), items.len(), "bun {mode} answered {} of {}", lines.len(), items.len());
+    lines
+}
+
+fn text_of(answer: &str) -> String {
+    match crate::json::parse(answer).unwrap() {
+        crate::json::Json::Str(s) => s,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn every_number_as_bun_writes_it() {
+    let mut dice = Dice(0x5eed_1234);
+    let mut xs: Vec<f64> = Vec::new();
+    for _ in 0..60_000 {
+        let x = f64::from_bits(dice.next());
+        if x.is_finite() {
+            xs.push(x);
+        }
+    }
+    // Where two shortest spellings are as near: 2^50 to 2^51 in quarters,
+    // and numbers of 16 and 17 digits around.
+    for _ in 0..20_000 {
+        let n = (1u64 << 50) + dice.next() % (1u64 << 50);
+        xs.push(n as f64 + *dice.pick(&[0.25, 0.75, 0.5]));
+        xs.push(((1u64 << 53) + dice.next() % (1u64 << 60)) as f64);
+        xs.push((dice.next() % 10_000_000_000_000_000) as f64 / 10f64.powi(dice.below(20) as i32));
+    }
+    for x in [1459077941253781.0 + 0.25, 0.1 + 0.2, 5e-324, f64::MAX, f64::MIN_POSITIVE, 1e21, 1e-7, 123456789012345680000.0, 9007199254740993.0] {
+        xs.push(x);
+        xs.push(-x);
+    }
+    let texts: Vec<String> = xs.iter().map(|x| format!("{x:e}")).collect();
+    let answers = answers("exact", "numbers", &texts);
+    let mut wrong = Vec::new();
+    for (x, answer) in xs.iter().zip(&answers) {
+        let theirs = match crate::json::parse(answer).unwrap() {
+            crate::json::Json::Arr(items) => items,
+            other => panic!("{other:?}"),
+        };
+        let ours = [crate::js::number_exact(*x), crate::js::number_exact(crate::js::math_round(*x))];
+        for (mine, bun_says) in ours.iter().zip([&theirs[0], &theirs[2]]) {
+            if &crate::json::Json::Str(mine.clone()) != bun_says {
+                wrong.push(format!("{x:e}: bun {bun_says:?}, the binary {mine}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{} differ:\n{}", wrong.len(), wrong.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+#[test]
+fn strings_as_bun_reads_them_as_numbers() {
+    let mut items: Vec<String> = [
+        "", " ", "0", "-0", "+0", "00", "007", "1.", ".5", ".", "+.5", "-.5e-3", "1e", "1e+", "1e+5", "1E5", "1e5.5", "0x", "0x10", "0X1F", "-0x10", "+0x10", "0xg", "0o17", "0O8", "0b101", "0b2",
+        "0x1fffffffffffff", "0x20000000000001", "0x20000000000003", "0x" , "Infinity", "-Infinity", "+Infinity", "infinity", "INFINITY", "NaN", "nan", "inf", "1_000", "1,5", "12abc", "\t12\n", "\u{a0}7\u{3000}",
+        "\u{feff}8", "\u{180e}9", "\u{2028}1\u{2029}", "1e400", "-1e400", "1e-400", "4.9e-324", "2.4703282292062327e-324", "2.4703282292062328e-324", "0.30000000000000004", "9007199254740993",
+        "123456789012345678901234567890", "٣", "１２",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    items.push(format!("0x{}", "f".repeat(300)));
+    items.push(format!("0b1{}", "0".repeat(1100)));
+    let alphabet = ["0", "1", "5", "9", ".", "e", "E", "+", "-", "x", "X", "o", "b", "a", "f", " ", "\t", "\n", "\u{a0}", "I", "nfinity", "_", "0x", "e-"];
+    let mut dice = Dice(42);
+    for _ in 0..40_000 {
+        let length = dice.below(9);
+        items.push((0..length).map(|_| *dice.pick(&alphabet)).collect());
+    }
+    let answers = answers("strings", "strings", &items);
+    let mut wrong = Vec::new();
+    for (item, answer) in items.iter().zip(&answers) {
+        let ours = shown(crate::js::string_to_number(item));
+        if text_of(answer) != ours {
+            wrong.push(format!("{item:?}: bun {answer}, the binary {ours}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} differ:\n{}", wrong.len(), wrong.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// A JSON text of a value of the kinds OCR output and a viewport may hold.
+fn value(dice: &mut Dice, depth: usize, names: &[&str]) -> String {
+    let scalars = ["null", "true", "false", "0", "-0", "5", "-1.5", "1e21", "1e400", "-1e400", "0.30000000000000004", "123456789012345680000", "\"\"", "\" 7 \"", "\"0x10\"", "\"abc\"", "\"Infinity\"", "\"1e3\"", "\"-0\"", "\"\\t\""];
+    match if depth >= 3 { 0 } else { dice.below(6) } {
+        0..=2 => dice.pick(&scalars).to_string(),
+        3 | 4 => format!("[{}]", (0..dice.below(3)).map(|_| value(dice, depth + 1, names)).collect::<Vec<_>>().join(", ")),
+        _ => format!("{{{}}}", (0..dice.below(3)).map(|_| format!("{}: {}", crate::js::json_string(dice.pick(names)), value(dice, depth + 1, names))).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+#[test]
+fn values_as_bun_turns_them_into_numbers() {
+    let names = ["toString", "valueOf", "a", "trim", "w", "__proto__"];
+    let mut dice = Dice(7);
+    let items: Vec<String> = (0..30_000).map(|_| value(&mut dice, 0, &names)).collect();
+    let answers = answers("values", "values", &items);
+    let mut wrong = Vec::new();
+    for (item, answer) in items.iter().zip(&answers) {
+        let ours = match crate::jsv::to_number(&crate::json::parse_js(item).unwrap()) {
+            Ok(x) => shown(x),
+            Err(crate::jsv::Coerce::NoDefault) => "throws No default value".into(),
+            Err(crate::jsv::Coerce::Deep) => continue,
+        };
+        if text_of(answer) != ours {
+            wrong.push(format!("{item}: bun {answer}, the binary {ours}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} differ:\n{}", wrong.len(), wrong.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+#[test]
+fn boxes_as_the_typescript_makes_them() {
+    use crate::json::Json;
+    let names = ["text", "x1", "y1", "x2", "y2", "x1_norm", "y1_norm", "x2_norm", "y2_norm", "confidence", "trim", "toString", "__proto__"];
+    let texts = ["\"OK\"", "\"リモートID\"", "\" Connect \"", "\"ΣΥΝΔΕΣΗ\"", "\"\"", "\"é😀\""];
+    let mut dice = Dice(99);
+    let mut items = Vec::new();
+    for _ in 0..20_000 {
+        let item = match dice.below(10) {
+            0 => value(&mut dice, 0, &names),
+            _ => {
+                let boxes: Vec<String> = (0..dice.below(4))
+                    .map(|_| {
+                        if dice.below(8) == 0 {
+                            return value(&mut dice, 1, &names);
+                        }
+                        let mut members = Vec::new();
+                        if dice.below(6) != 0 {
+                            members.push(format!("\"text\": {}", if dice.below(5) == 0 { value(&mut dice, 2, &names) } else { dice.pick(&texts).to_string() }));
+                        }
+                        for _ in 0..dice.below(6) {
+                            members.push(format!("{}: {}", crate::js::json_string(dice.pick(&names)), value(&mut dice, 2, &names)));
+                        }
+                        format!("{{{}}}", members.join(", "))
+                    })
+                    .collect();
+                format!("[{}]", boxes.join(", "))
+            }
+        };
+        items.push(item);
+    }
+    let answers = answers("boxes", "boxes", &items);
+    let mut wrong = Vec::new();
+    let mut checked = 0;
+    for (item, answer) in items.iter().zip(&answers) {
+        let raw = crate::json::parse_js(item).unwrap();
+        let found = crate::ocr::normalize_js(&raw, 1280.0, 720.0).and_then(|boxes| match crate::ocr::find_any_js(&boxes, &["リモートID"]) {
+            Ok(_) => Ok(boxes.clone()),
+            Err(stop) => Err(stop),
+        });
+        let ours = match found {
+            Ok(boxes) => {
+                let rows: Vec<Json> = boxes
+                    .iter()
+                    .map(|b| Json::Arr(vec![Json::Str(crate::js::number_exact(b.x)), Json::Str(crate::js::number_exact(b.y)), Json::Str(crate::js::number_exact(b.w)), Json::Str(crate::js::number_exact(b.h)), Json::Str(b.text.clone().unwrap())]))
+                    .collect();
+                Json::Arr(rows)
+            }
+            Err(crate::run::Stop::Exit(1, Some(message))) => Json::Str(format!("throws {}", message.strip_prefix("[rustdesk-skill] error: ").unwrap())),
+            Err(crate::run::Stop::HandBack) => continue,
+            Err(other) => panic!("{other:?}"),
+        };
+        checked += 1;
+        let theirs = crate::json::parse(answer).unwrap();
+        if theirs != ours {
+            wrong.push(format!("{item}\n    bun {answer}\n    the binary {ours:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} of {checked} differ:\n{}", wrong.len(), wrong.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
+    assert!(checked > 19_000, "{checked}");
+}
+
+#[test]
+fn sorted_as_bun_sorts() {
+    let pools: [&[&str]; 3] = [&["NaN", "Infinity", "-Infinity", "0", "-0", "1", "2", "3", "-1", "5"], &["NaN", "0", "1", "2"], &["0", "-0", "1", "1", "2", "7", "Infinity"]];
+    let mut dice = Dice(2024);
+    let mut lists: Vec<Vec<&str>> = Vec::new();
+    for _ in 0..6_000 {
+        let pool = *dice.pick(&pools);
+        let n = if dice.below(4) == 0 { dice.below(400) } else { dice.below(40) };
+        lists.push((0..n).map(|_| *dice.pick(pool)).collect());
+    }
+    let scratch = Scratch::new("sort");
+    let file = scratch.0.join("lists.json");
+    std::fs::write(&file, format!("[{}]", lists.iter().map(|l| json_list(l)).collect::<Vec<_>>().join(",\n"))).unwrap();
+    let answers = bun(&scratch.0, &["sort", file.to_str().unwrap()], &[]);
+    let mut wrong = Vec::new();
+    for (list, answer) in lists.iter().zip(answers.lines()) {
+        let mut items: Vec<(usize, f64)> = list.iter().map(|y| crate::js::string_to_number(y)).enumerate().collect();
+        crate::jssort::sort(&mut items, |a, b| a.1 - b.1 < 0.0);
+        let ours = format!("[{}]", items.iter().map(|(i, _)| i.to_string()).collect::<Vec<_>>().join(","));
+        if ours != answer {
+            wrong.push(format!("{list:?}: bun {answer}, the binary {ours}"));
+        }
+    }
+    assert_eq!(answers.lines().count(), lists.len());
+    assert!(wrong.is_empty(), "{} of {} differ:\n{}", wrong.len(), lists.len(), wrong.iter().take(5).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+#[test]
+fn fixed_texts_found_as_bun_finds_them() {
+    let candidates = ["リモートID", "Remote ID", "Control Remote", "ID", "接続", "Connect", "Connect to", "パスワードが必要です", "Password Required", "Please enter", "パスワード", "記憶する", "Remember", "Remember password", "OK", "确定", "確定", "リモートデスクトップ", "Remote Desktop"];
+    let pieces = ["Σ", "σ", "ς", "ΣΣ", "Ⰰ", "ⰰ", "𞤀", "𞤢", "Ꜳ", "ꜳ", "Ɦ", "İ", "K", "k", "I", "D", "i", "d", "O", "o", "K", "C", "onnect", "ONNECT", "Remote", " ", "　", "パスワード", "リモート", "ID", "接続", "a", "Á", "\u{301}"];
+    let mut dice = Dice(5);
+    let mut pairs = Vec::new();
+    for _ in 0..40_000 {
+        let t: String = (0..dice.below(7)).map(|_| *dice.pick(&pieces)).collect();
+        pairs.push((t, dice.pick(&candidates).to_string()));
+    }
+    let scratch = Scratch::new("includes");
+    let file = scratch.0.join("pairs.json");
+    std::fs::write(&file, format!("[{}]", pairs.iter().map(|(t, q)| format!("[{},{}]", crate::js::json_string(t), crate::js::json_string(q))).collect::<Vec<_>>().join(",\n"))).unwrap();
+    let answers = bun(&scratch.0, &["includes", file.to_str().unwrap()], &[]);
+    let mut wrong = Vec::new();
+    for ((t, q), answer) in pairs.iter().zip(answers.lines()) {
+        let ours = crate::js::lower_for_fixed(crate::js::trim(t)).contains(&crate::js::lower_for_fixed(crate::js::trim(q)));
+        if ours.to_string() != answer {
+            wrong.push(format!("{t:?} {q:?}: bun {answer}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} differ:\n{}", wrong.len(), wrong.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
 }

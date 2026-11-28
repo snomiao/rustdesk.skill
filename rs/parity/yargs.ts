@@ -11,6 +11,18 @@
 //                                         it was started with
 //   bun rs/parity/yargs.ts numbers <file> String(x) and x.toFixed(2) for the
 //                                         numbers in <file> (JSON, as text)
+//   bun rs/parity/yargs.ts strings <file> Number(s) for the strings in <file>
+//   bun rs/parity/yargs.ts values <file>  Number(JSON.parse(t)) for the JSON
+//                                         texts in <file>, or what it throws
+//   bun rs/parity/yargs.ts boxes <file>   for the JSON texts in <file>, what
+//                                         src/ocr.ts normalizeBoxes makes of
+//                                         each at 1280 by 720 and whether
+//                                         matchText then throws (as connect
+//                                         calls them)
+//   bun rs/parity/yargs.ts sort <file>    for lists of numbers in <file>, the
+//                                         order (a, b) => a.y - b.y sorts them in
+//   bun rs/parity/yargs.ts includes <file> t.toLowerCase().includes(q) for
+//                                         the pairs [t, q] in <file>
 //
 // For `lines` it prints one JSON value per line: the call, written as
 // rs/src/args.rs `describe` writes a command, or null when yargs did
@@ -22,6 +34,7 @@
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import { buildParser, type CliDeps } from "../../bin/rustdesk-skill.ts";
+import { matchText, normalizeBoxes } from "../../src/ocr.ts";
 
 const [what, file] = process.argv.slice(2);
 const out: string[] = [];
@@ -106,8 +119,40 @@ if (what === "lines") {
     const x = Number(text);
     out.push(JSON.stringify([String(x), x.toFixed(2), String(Math.round(x))]));
   }
+} else if (what === "strings" || what === "values") {
+  // -0 as such: String(-0) is "0".
+  const show = (x: number) => (Object.is(x, -0) ? "-0" : String(x));
+  const items: string[] = JSON.parse(readFileSync(file, "utf8"));
+  for (const item of items) {
+    try {
+      out.push(JSON.stringify(show(Number(what === "strings" ? item : JSON.parse(item)))));
+    } catch (e) {
+      out.push(JSON.stringify(`throws ${(e as Error).message}`));
+    }
+  }
+} else if (what === "boxes") {
+  const items: string[] = JSON.parse(readFileSync(file, "utf8"));
+  for (const item of items) {
+    try {
+      const boxes = normalizeBoxes(JSON.parse(item), 1280, 720);
+      matchText(boxes, "リモートID", { contains: true });
+      out.push(JSON.stringify(boxes.map((b) => [String(b.x), String(b.y), String(b.w), String(b.h), b.text])));
+    } catch (e) {
+      out.push(JSON.stringify(`throws ${(e as Error).message}`));
+    }
+  }
+} else if (what === "sort") {
+  const lists: (number | string)[][] = JSON.parse(readFileSync(file, "utf8"));
+  for (const list of lists) {
+    const items = list.map((y, i) => ({ i, y: Number(y) }));
+    items.sort((a, b) => a.y - b.y);
+    out.push(JSON.stringify(items.map((b) => b.i)));
+  }
+} else if (what === "includes") {
+  const pairs: [string, string][] = JSON.parse(readFileSync(file, "utf8"));
+  for (const [t, q] of pairs) out.push(JSON.stringify(t.trim().toLowerCase().includes(q.trim().toLowerCase())));
 } else {
-  console.error("usage: bun rs/parity/yargs.ts lines <file> | chars | tmpdir | numbers <file>");
+  console.error("usage: bun rs/parity/yargs.ts lines <file> | chars | tmpdir | numbers <file> | strings <file> | values <file> | boxes <file> | sort <file> | includes <file>");
   process.exit(2);
 }
 process.stdout.write(out.join("\n") + "\n");
