@@ -4397,22 +4397,20 @@
    }
   },
   {
-   "name": "screenshot: the step prints too much",
+   "name": "screenshot: the step prints more than the binary takes",
    "args": [
     "ss"
    ],
    "env": {
     "RDS_SESSION_NAME": "parity",
     "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
-    "PARITY_PW": "{\"screenshot\":{\"big\":2000000}}"
+    "PARITY_PW": "{\"screenshot\":{\"big\":1020000}}"
    },
    "after": [
-    "sort -u <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+    "sort -u <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'",
+    "cksum rds-screenshot.png shot.png \"$TMPDIR/rustdesk-skill/rds-shot.png\" rds-shot.png 2>&1"
    ],
-   "handback": "a step that prints more than a mebibyte: bun stops it and says so in its own words",
-   "skip": {
-    "win32": "the TypeScript's report there, with the mebibyte bun kept, is more than the runner's own pipe takes (ENOBUFS)"
-   }
+   "handback": "a program that prints a mebibyte or nearly: bun stops it at a mebibyte and says so in its own words"
   },
   {
    "name": "screenshot: without a session name",
