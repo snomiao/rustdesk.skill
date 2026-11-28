@@ -192,6 +192,9 @@ add("list: stdout on a terminal", ["list"], { setup: RECENTS('["123"]'), tty: "s
 
 // ═══════════════════════════ what bun reads first ═══════════════════════════
 
+const GIT = "git init -q -b main";
+const COMMIT = "git -c user.name=p -c user.email=p@example.com commit -q --allow-empty -m x";
+
 const ENV = (files) => ({ files });
 const CONF = (dir, ids) => [`mkdir -p ${dir} && printf '%s' ${sq(JSON.stringify(ids))} > ${dir}/recents.json`];
 const DOTENV = "bun loads it, in a syntax the binary does not read";
@@ -217,9 +220,27 @@ add("runtime: RDS_SESSION_NAME set but empty, and in .env.local", ["scroll", "5"
 add("runtime: bunfig.toml here", ["list"], { files: { "bunfig.toml": "" }, back: "bun reads bunfig.toml" });
 add("runtime: ~/.bunfig.toml", ["list"], { setup: ["touch <HOME>/.bunfig.toml"], back: "bun reads ~/.bunfig.toml" });
 add("runtime: $XDG_CONFIG_HOME/.bunfig.toml", ["list"], { setup: ["mkdir -p <HOME>/.config && touch <HOME>/.config/.bunfig.toml"], back: "bun reads $XDG_CONFIG_HOME/.bunfig.toml" });
-add("runtime: package.json here", ["list"], { files: { "package.json": "{}" }, back: "bun reads package.json here and above, and may say so on stderr" });
+add("runtime: package.json here", ["list"], { files: { "package.json": "{}" } });
 add("runtime: a broken package.json above", ["scroll", "5"], { files: { "package.json": "{oops", "sub/x": "" }, cd: "sub", back: "bun reads package.json here and above, and may say so on stderr" });
-add("runtime: tsconfig.json here", ["list"], { files: { "tsconfig.json": "{}" }, back: "bun reads tsconfig.json here and above" });
+add("runtime: tsconfig.json here", ["list"], { files: { "tsconfig.json": "{}" } });
+const PKG = JSON.stringify({ name: "some-app", version: "1.2.3", private: true, type: "module", scripts: { test: "bun test" }, dependencies: { yargs: "^17.7.2" }, devDependencies: { typescript: "^5" } }, null, 2) + "\n";
+const TSC = JSON.stringify({ compilerOptions: { target: "ESNext", module: "ESNext", strict: true, baseUrl: ".", types: ["bun-types"] }, include: ["src"] }, null, 2) + "\n";
+const PF = "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones";
+add("runtime: project file: a typical package.json here", ["list"], { files: { "package.json": PKG }, setup: RECENTS('["1"]') });
+add("runtime: project file: a typical package.json here, scroll", ["scroll", "5"], { files: { "package.json": PKG }, env: { RDS_SESSION_NAME: null } });
+add("runtime: project file: all three above and here", ["scroll", "5"], { files: { "package.json": PKG, "tsconfig.json": TSC, "jsconfig.json": "{\n}\n", "app/package.json": '{"name": "inner", "type": "commonjs", "main": "index.js"}', "app/tsconfig.json": TSC }, cd: "app", env: { RDS_SESSION_NAME: null } });
+add("runtime: project file: in a git repository with a package.json", ["scroll", "5"], { files: { "package.json": PKG }, setup: [GIT, COMMIT], env: { RDS_SESSION_NAME: null } });
+add("runtime: project file: type weird", ["list"], { files: { "package.json": '{"type": "weird"}' }, back: PF });
+add("runtime: project file: a name given twice", ["list"], { files: { "package.json": '{"name": "a", "name": "b"}' }, back: PF });
+add("runtime: project file: a name given twice, deeper", ["list"], { files: { "package.json": '{"scripts": {"t": "1", "t": "2"}}' }, back: PF });
+add("runtime: project file: comments", ["list"], { files: { "tsconfig.json": '// settings\n{"compilerOptions": {"strict": true,},}\n' }, back: PF });
+add("runtime: project file: exports", ["list"], { files: { "package.json": '{"exports": {".": "./index.js"}}' }, back: PF });
+add("runtime: project file: extends", ["list"], { files: { "tsconfig.json": '{"extends": "./base.json"}' }, back: PF });
+add("runtime: project file: paths", ["list"], { files: { "tsconfig.json": '{"compilerOptions": {"paths": {"a*b*": ["./x"]}}}' }, back: PF });
+add("runtime: project file: empty", ["list"], { files: { "package.json": "" }, back: PF });
+add("runtime: project file: a list", ["list"], { files: { "jsconfig.json": "[]" }, back: PF });
+add("runtime: project file: a byte order mark", ["list"], { files: { "package.json": "\ufeff{}" }, back: PF });
+add("runtime: project file: a directory", ["list"], { setup: ["mkdir package.json"], back: PF });
 add("runtime: BUN_OPTIONS", ["list"], { env: { BUN_OPTIONS: "--smol" }, back: "a variable that steers bun" });
 add("runtime: NODE_OPTIONS", ["list"], { env: { NODE_OPTIONS: "" }, back: "a variable that steers bun" });
 add("runtime: BUN_INSTALL is no matter", ["list"], { env: { BUN_INSTALL: "<ROOT>/bun" } });
@@ -235,8 +256,6 @@ add("runtime: NO_COLOR on a terminal for list", ["list"], { tty: true, env: { NO
 
 // ═══════════════════════════ the session name ═══════════════════════════
 
-const GIT = "git init -q -b main";
-const COMMIT = "git -c user.name=p -c user.email=p@example.com commit -q --allow-empty -m x";
 const S = (name, args, o = {}) => add(`session: ${name}`, args, { ...o, env: { RDS_SESSION_NAME: null, ...(o.env || {}) } });
 add("session: RDS_SESSION_NAME is sanitised", ["scroll", "5"], { env: { RDS_SESSION_NAME: "  My Proj/Main #1 " } });
 add("session: RDS_SESSION_NAME of nothing but marks", ["scroll", "5"], { env: { RDS_SESSION_NAME: "///" } });

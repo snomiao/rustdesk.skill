@@ -1800,7 +1800,9 @@
    "after": [
     "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
    ],
-   "handback": "bun reads package.json here and above, and may say so on stderr"
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
   },
   {
    "name": "runtime: a broken package.json above",
@@ -1837,7 +1839,287 @@
    "after": [
     "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
    ],
-   "handback": "bun reads tsconfig.json here and above"
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "runtime: project file: a typical package.json here",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\n  \"name\": \"some-app\",\n  \"version\": \"1.2.3\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  },\n  \"dependencies\": {\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5\"\n  }\n}\n"
+   },
+   "setup": [
+    "mkdir -p <HOME>/.config/rustdesk-skill && printf '%s' '[\"1\"]' > <HOME>/.config/rustdesk-skill/recents.json"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "runtime: project file: a typical package.json here, scroll",
+   "args": [
+    "scroll",
+    "5"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": null,
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\n  \"name\": \"some-app\",\n  \"version\": \"1.2.3\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  },\n  \"dependencies\": {\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5\"\n  }\n}\n"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "runtime: project file: all three above and here",
+   "args": [
+    "scroll",
+    "5"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": null,
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_CD": "app"
+   },
+   "files": {
+    "package.json": "{\n  \"name\": \"some-app\",\n  \"version\": \"1.2.3\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  },\n  \"dependencies\": {\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5\"\n  }\n}\n",
+    "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"strict\": true,\n    \"baseUrl\": \".\",\n    \"types\": [\n      \"bun-types\"\n    ]\n  },\n  \"include\": [\n    \"src\"\n  ]\n}\n",
+    "jsconfig.json": "{\n}\n",
+    "app/package.json": "{\"name\": \"inner\", \"type\": \"commonjs\", \"main\": \"index.js\"}",
+    "app/tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"strict\": true,\n    \"baseUrl\": \".\",\n    \"types\": [\n      \"bun-types\"\n    ]\n  },\n  \"include\": [\n    \"src\"\n  ]\n}\n"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "runtime: project file: in a git repository with a package.json",
+   "args": [
+    "scroll",
+    "5"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": null,
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\n  \"name\": \"some-app\",\n  \"version\": \"1.2.3\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  },\n  \"dependencies\": {\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5\"\n  }\n}\n"
+   },
+   "setup": [
+    "git init -q -b main",
+    "git -c user.name=p -c user.email=p@example.com commit -q --allow-empty -m x"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "runtime: project file: type weird",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\"type\": \"weird\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: a name given twice",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\"name\": \"a\", \"name\": \"b\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: a name given twice, deeper",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\"scripts\": {\"t\": \"1\", \"t\": \"2\"}}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: comments",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "tsconfig.json": "// settings\n{\"compilerOptions\": {\"strict\": true,},}\n"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: exports",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "{\"exports\": {\".\": \"./index.js\"}}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: extends",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "tsconfig.json": "{\"extends\": \"./base.json\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: paths",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "tsconfig.json": "{\"compilerOptions\": {\"paths\": {\"a*b*\": [\"./x\"]}}}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: empty",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": ""
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: a list",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "jsconfig.json": "[]"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: a byte order mark",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "files": {
+    "package.json": "﻿{}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
+  },
+  {
+   "name": "runtime: project file: a directory",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "setup": [
+    "mkdir package.json"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "bun reads the project files here and above and says on stderr what it does not like; the binary takes only plain ones"
   },
   {
    "name": "runtime: BUN_OPTIONS",
