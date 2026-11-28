@@ -110,6 +110,8 @@ export function buildParser(argv: string[], deps: CliDeps = realDeps) {
             fresh: a["new"] as boolean,
           });
           printJson(res);
+          // Not entered / not accepted → non-zero so callers can't mistake it for success.
+          if (!res.ok) process.exit(7);
         }),
     )
     .command(

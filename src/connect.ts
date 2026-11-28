@@ -103,13 +103,51 @@ export function pickPasswordField(boxes: Box[], title?: Box): Box | undefined {
   return candidates[0];
 }
 
+/** A run of mask glyphs as OCR reads a filled password field (●●●, •••, ***). */
+const MASK_RE = /[•●∙·・*＊◦○]{2,}/;
+
+/**
+ * Does the password field look FILLED? An empty field shows its "パスワード" /
+ * "Password" placeholder (what pickPasswordField finds); once text is entered the
+ * placeholder is replaced by mask dots. Filled = mask dots seen, or the placeholder
+ * gone. Pure & unit-tested.
+ */
+export function passwordFieldFilled(boxes: Box[], title?: Box): boolean {
+  if (boxes.some((b) => MASK_RE.test(b.text) && (!title || b.y > title.y))) return true;
+  return !pickPasswordField(boxes, title);
+}
+
+/** Error text RustDesk shows in the dialog when the password is rejected. */
+export function passwordRejected(boxes: Box[]): boolean {
+  return !!findAny(boxes, ["パスワードが間違", "間違ったパスワード", "Wrong Password", "Wrong password", "incorrect"]);
+}
+
+/** Blocking sleep (each rds command is a short-lived sync process). */
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export type PasswordOutcome =
+  | "no-dialog" // no password dialog was observed
+  | "not-entered" // field stayed empty after typing (nothing submitted)
+  | "rejected" // submitted, dialog still up (wrong password / not accepted)
+  | "accepted"; // submitted and the dialog went away
+
+const FOCUS_SETTLE_MS = 300;
+const TYPE_ATTEMPTS = 2;
+const ACCEPT_POLLS = 4;
+const ACCEPT_POLL_MS = 1500;
+
 /**
  * Handle the password dialog: click the field, type the password (local UI → no
- * mangling), optionally tick 記憶する, click OK.
+ * mangling), VERIFY the field is filled (retry once), optionally tick 記憶する,
+ * click OK, then VERIFY the dialog went away. Never reports success for work it
+ * could not confirm (issue #1): an empty field is "not-entered" (OK not clicked),
+ * a dialog that stays up is "rejected".
  */
-export function handlePasswordDialog(pw: string, remember: boolean): boolean {
-  const boxes = ocr();
-  if (!passwordDialogPresent(boxes)) return false;
+export function handlePasswordDialog(pw: string, remember: boolean): PasswordOutcome {
+  let boxes = ocr();
+  if (!passwordDialogPresent(boxes)) return "no-dialog";
 
   // Focus the password input. Prefer the field's own OCR box — the "パスワード" /
   // "Password" placeholder that is NOT the dialog title ("...が必要です" /
@@ -118,14 +156,21 @@ export function handlePasswordDialog(pw: string, remember: boolean): boolean {
   // against the live dialog: the title+offset guess missed the input.)
   const title = findAny(boxes, ["パスワードが必要です", "Password Required"]);
   const field = pickPasswordField(boxes, title);
-  if (field) {
-    const c = boxCenter(field);
-    clickScreenshotPx(c.x, c.y);
-  } else if (title) {
-    const c = boxCenter(title);
-    clickScreenshotPx(c.x, c.y + Math.max(40, title.h * 2));
+  const target = field
+    ? boxCenter(field)
+    : title
+      ? { x: boxCenter(title).x, y: boxCenter(title).y + Math.max(40, title.h * 2) }
+      : undefined;
+
+  let filled = false;
+  for (let i = 0; i < TYPE_ATTEMPTS && !filled; i++) {
+    if (target) clickScreenshotPx(target.x, target.y);
+    sleepMs(FOCUS_SETTLE_MS); // let Flutter attach focus before keystrokes
+    typeText(pw); // local dialog — no JP-layout mangling
+    boxes = ocr();
+    filled = passwordFieldFilled(boxes, findAny(boxes, ["パスワードが必要です", "Password Required"]));
   }
-  typeText(pw); // local dialog — direct typing is reliable
+  if (!filled) return "not-entered";
 
   if (remember) {
     const chk = findAny(boxes, ["記憶する", "Remember", "Remember password"]);
@@ -142,8 +187,25 @@ export function handlePasswordDialog(pw: string, remember: boolean): boolean {
   } else {
     pressKey("Enter");
   }
-  return true;
+
+  // Accepted = the dialog closes. An explicit wrong-password message, or a dialog
+  // that is still up after the polls, means the password was not accepted.
+  for (let i = 0; i < ACCEPT_POLLS; i++) {
+    sleepMs(ACCEPT_POLL_MS);
+    boxes = ocr();
+    if (passwordRejected(boxes)) return "rejected";
+    if (!passwordDialogPresent(boxes)) return "accepted";
+  }
+  return "rejected";
 }
+
+const OUTCOME_NOTE: Record<PasswordOutcome, string> = {
+  "no-dialog": "no password dialog observed",
+  "not-entered":
+    "password NOT entered: the field stayed empty after typing (nothing submitted); re-run connect or fill it manually",
+  rejected: "password submitted but NOT accepted: the dialog is still open (wrong password?)",
+  accepted: "password accepted",
+};
 
 /**
  * Is the RustDesk home / ID-entry screen on display? The connect form shows the
@@ -187,17 +249,19 @@ export function connect(opts: ConnectOptions): ConnectResult {
   triggerConnect();
 
   // The dialog may take a moment; we attempt once (callers can re-run connect).
-  const handled = handlePasswordDialog(pw, !!opts.rememberPassword);
+  const outcome = handlePasswordDialog(pw, !!opts.rememberPassword);
+  const failed = outcome === "not-entered" || outcome === "rejected";
 
-  if (opts.rememberPassword) setPassword(opts.id, pw);
+  // Only remember a password that was actually accepted (or not challenged).
+  if (opts.rememberPassword && !failed) setPassword(opts.id, pw);
   recordRecent(opts.id);
 
   const connected = detectConnected();
   return {
-    ok: true,
+    ok: !failed,
     id: opts.id,
     connected,
-    note: handled ? "password dialog handled" : "no password dialog observed",
+    note: OUTCOME_NOTE[outcome],
   };
 }
 
