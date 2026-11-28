@@ -633,7 +633,7 @@ V("screenshot: a name with a trailing slash", ["ss", "d/"], { setup: ["mkdir d"]
 V("scroll: RDS_SESSION_DIR a link to a folder", ["scroll", "1"], { env: { RDS_SESSION_DIR: "<ROOT>/link" }, setup: ["mkdir <ROOT>/real && ln -s <ROOT>/real <ROOT>/link"], skip: LINK });
 V("scroll: RDS_SESSION_DIR a dangling link", ["scroll", "1"], { env: { RDS_SESSION_DIR: "<ROOT>/dangling" }, setup: ["ln -s <ROOT>/nowhere <ROOT>/dangling"], back: "a session directory that is a dangling link: bun's own words", skip: LINK });
 V("status: the address step killed by a signal", ["status"], { pw: { "eval:url": { kill: "SIGKILL" } }, skip: { win32: "no signals" } });
-V("type: 131,000 characters", ["type", "b".repeat(131000)]);
+V("type: 131,000 characters", ["type", "b".repeat(131000)], { skip: { win32: "a command line of 131,000 characters, longer than Windows takes one (ENAMETOOLONG)" } });
 V("list: a big list in Japanese", ["list"], { setup: [`mkdir -p <HOME>/.config/rustdesk-skill && printf '%s' ${sq(JSON.stringify(Array.from({ length: 5000 }, (_, i) => `id-${i}-日本`)))} > <HOME>/.config/rustdesk-skill/recents.json`] });
 V("paste: a text with Unicode line separators", ["paste", "a b c\r\nd"], CLIP);
 V("click: --nth 1 with a single match", ["click", "OK", "--nth", "1"], { ...OCR, ocr: { boxes: [pbox("OK", 10, 10)] } });

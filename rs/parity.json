@@ -9163,6 +9163,9 @@
    "after": [
     "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
    ],
+   "skip": {
+    "win32": "a command line of 131,000 characters, longer than Windows takes one (ENAMETOOLONG)"
+   },
    "handback": {
     "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
    }

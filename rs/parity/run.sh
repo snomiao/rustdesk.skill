@@ -127,12 +127,13 @@ case $stdout_to in
     exec 3> "$fifo"
     wait "$reader"
     rm -f "$fifo"
-    "$@" 1>&3 2> "$errors"
+    # Not exec'd: macOS's sh would hand the command `_`, its own path.
+    env -u _ "$@" 1>&3 2> "$errors"
     code=$?
     exec 3>&-
     ;;
   full)
-    "$@" > /dev/full 2> "$errors"
+    env -u _ "$@" > /dev/full 2> "$errors"
     code=$?
     ;;
   *)
