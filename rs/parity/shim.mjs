@@ -38,6 +38,7 @@
 //   code       the exit code (0)
 //   kill       end by this signal instead (SIGKILL, SIGTERM)
 //   big        print this many bytes of `a` on stdout first
+//   bigerr     print this many bytes of `b` on stderr first
 //   png        for `screenshot`: [width, height] of the PNG written to the
 //              --filename path ([1280, 720] when not said), "short" for a
 //              file of 10 bytes, "none" for no file, "dir" for a directory
@@ -158,6 +159,7 @@ function environment() {
 function finish(answer, defaultOut = "") {
   const a = answer || {};
   if (a.big) process.stdout.write("a".repeat(a.big));
+  if (a.bigerr) process.stderr.write("b".repeat(a.bigerr));
   const out = a.out !== undefined ? a.out : defaultOut;
   if (out) process.stdout.write(bytes(out));
   if (a.err) process.stderr.write(bytes(a.err));

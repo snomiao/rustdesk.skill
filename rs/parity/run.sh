@@ -23,6 +23,16 @@
 #   PARITY_NO_PW=1      no playwright-cli among the stand-ins
 #   PARITY_NO_OCR=1     no python3 among the stand-ins
 #   PARITY_NO_CLIP=1    no xclip and no pbcopy among the stand-ins
+#   PARITY_STDOUT=gone  stdout a pipe whose reader has gone away
+#   PARITY_STDOUT=full  stdout /dev/full (Linux)
+#
+# With PARITY_STDOUT the command's stderr is kept in a file and passed on
+# when it ends, and whatever reaches stdout is lost, the runner's stand-in
+# package's word that it was reached included. So in the hand-back check
+# (RUSTDESK_SKILL_PACKAGE_ROOT is the runner's stand-in there) the binary
+# is asked to say when it hands back (RUSTIFY_HANDBACK_TRACE, which js_fallback
+# reads), and this script passes that on to the runner as the stand-in
+# would have said it.
 #
 # On Windows (Git Bash) the runtime finds programs by PATHEXT and never runs
 # these stand-ins, which are shell scripts: the cases that need them are
@@ -91,6 +101,46 @@ if [ -n "$pkg" ] && [ -f "$pkg/package.json" ] && [ ! -e "$pkg/ocr" ]; then
 fi
 
 cd_to=${PARITY_CD:-}
-unset PARITY_CD PARITY_NO_GIT PARITY_NO_PW PARITY_NO_OCR PARITY_NO_CLIP
+stdout_to=${PARITY_STDOUT:-}
+unset PARITY_CD PARITY_NO_GIT PARITY_NO_PW PARITY_NO_OCR PARITY_NO_CLIP PARITY_STDOUT
 if [ -n "$cd_to" ]; then cd "$cd_to"; fi
-exec "$@"
+if [ -z "$stdout_to" ]; then exec "$@"; fi
+
+marker=__RUSTIFY_HANDED_BACK__
+traced="rustify: handed back to the JavaScript"
+stand_in=false
+if [ -n "$pkg" ] && grep -q "$marker" "$pkg/bin/rustdesk-skill.ts" 2> /dev/null; then
+  stand_in=true
+  RUSTIFY_HANDBACK_TRACE=1
+  export RUSTIFY_HANDBACK_TRACE
+fi
+errors="$TMPDIR/stderr.$$"
+set +e
+case $stdout_to in
+  gone)
+    fifo="$TMPDIR/stdout.$$"
+    mkfifo "$fifo"
+    # A reader that opens the pipe and leaves at once; the writer's end
+    # opens when the reader's has, and is used once the reader is gone.
+    (: < "$fifo") &
+    reader=$!
+    exec 3> "$fifo"
+    wait "$reader"
+    rm -f "$fifo"
+    "$@" 1>&3 2> "$errors"
+    code=$?
+    exec 3>&-
+    ;;
+  full)
+    "$@" > /dev/full 2> "$errors"
+    code=$?
+    ;;
+  *)
+    echo "run.sh: PARITY_STDOUT=$stdout_to is neither gone nor full" >&2
+    exit 90
+    ;;
+esac
+if $stand_in && grep -a -q -x "$traced" "$errors"; then echo "$marker"; fi
+grep -a -v -x "$traced" "$errors" >&2
+rm -f "$errors"
+exit "$code"
