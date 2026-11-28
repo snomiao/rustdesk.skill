@@ -13,7 +13,8 @@
 //!   `$XDG_CONFIG_HOME/.bunfig.toml`: any of them there hands back;
 //! - reads package.json, tsconfig.json and jsconfig.json in the current
 //!   directory and in every directory above it, and says on stderr what it
-//!   does not like in them: any of them there hands back;
+//!   does not like in them: one that is not plain (`plain_project_file`)
+//!   hands back;
 //! - loads `.env.development.local`, `.env.local`, `.env.development` and
 //!   `.env` of the current directory into `process.env` (a variable that is
 //!   set wins; among the files, that order wins), in a syntax of its own.
@@ -35,6 +36,7 @@ use std::io::{ErrorKind, IsTerminal};
 use std::path::Path;
 
 use crate::js;
+use crate::json::{self, Json};
 use crate::HandBack;
 
 pub struct Machine {
@@ -100,6 +102,52 @@ fn absent(path: &Path) -> bool {
     matches!(fs::symlink_metadata(path), Err(err) if matches!(err.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory))
 }
 
+/// A member name given twice, at any depth: bun warns about it.
+fn has_duplicate(value: &Json) -> bool {
+    match value {
+        Json::Obj(members) => {
+            members.iter().enumerate().any(|(i, (key, _))| members[..i].iter().any(|(other, _)| other == key)) || members.iter().any(|(_, value)| has_duplicate(value))
+        }
+        Json::Arr(items) => items.iter().any(has_duplicate),
+        _ => false,
+    }
+}
+
+/// A package.json, tsconfig.json or jsconfig.json about which bun says
+/// nothing on stderr, as far as the binary is sure: strict JSON (no
+/// comments, no trailing commas, no byte order mark), an object, no member
+/// given twice; in package.json a `type` of "module" or "commonjs" if any,
+/// and no `exports`, `imports` or `browser` (whose shapes bun checks); in
+/// the others no `extends` (another file to read), and `compilerOptions`,
+/// if any, an object without `paths`, `jsxFactory`, `jsxFragmentFactory` or
+/// `importsNotUsedAsValues` (whose values bun checks). Everything else goes
+/// back, valid or not: bun says on stderr what it does not like (a syntax
+/// error, `Duplicate key`, a `type` it does not know, a bad `paths`
+/// pattern), and the `runtime: project file` parity cases hold the rest.
+pub fn plain_project_file(name: &str, bytes: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(bytes) else { return false };
+    let Ok(root @ Json::Obj(_)) = json::parse(text) else { return false };
+    if has_duplicate(&root) {
+        return false;
+    }
+    if name == "package.json" {
+        let type_ok = match root.get("type") {
+            None => true,
+            Some(Json::Str(kind)) => kind == "module" || kind == "commonjs",
+            Some(_) => false,
+        };
+        return type_ok && ["exports", "imports", "browser"].iter().all(|key| root.get(key).is_none());
+    }
+    if root.get("extends").is_some() {
+        return false;
+    }
+    match root.get("compilerOptions") {
+        None => true,
+        Some(options @ Json::Obj(_)) => ["paths", "jsxFactory", "jsxFragmentFactory", "importsNotUsedAsValues"].iter().all(|key| options.get(key).is_none()),
+        Some(_) => false,
+    }
+}
+
 /// bun cannot load a program from a path with `?` or `\` in it.
 fn loadable(path: &str) -> bool {
     !path.contains(['?', '\\'])
@@ -133,8 +181,15 @@ pub fn machine() -> Result<Machine, HandBack> {
         return Err(HandBack);
     }
     for dir in cwd_path.ancestors() {
-        if ["package.json", "tsconfig.json", "jsconfig.json"].iter().any(|name| !absent(&dir.join(name))) {
-            return Err(HandBack);
+        for name in ["package.json", "tsconfig.json", "jsconfig.json"] {
+            let path = dir.join(name);
+            if absent(&path) {
+                continue;
+            }
+            let plain = fs::metadata(&path).is_ok_and(|meta| meta.is_file()) && fs::read(&path).is_ok_and(|bytes| plain_project_file(name, &bytes));
+            if !plain {
+                return Err(HandBack);
+            }
         }
     }
 
@@ -266,6 +321,42 @@ mod tests {
             "RUSTDESK_SKILL_NO_NATIVE=1", "FORCE_COLOR=1", "NO_COLOR=1", "LD_PRELOAD=x", "A=a\\b", "A=\"a\\b\"",
         ] {
             assert_eq!(parse_plain_dotenv(text), Err(HandBack), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn project_files_bun_says_nothing_about() {
+        for (name, text) in [
+            ("package.json", "{}"),
+            ("package.json", r#"{"name": "x", "version": "1.0.0", "type": "module", "scripts": {"t": "bun test"}, "dependencies": {"y": "^1"}}"#),
+            ("package.json", r#"{"type": "commonjs", "main": 5, "workspaces": ["a"]}"#),
+            ("tsconfig.json", r#"{"compilerOptions": {"strict": true, "target": "ESNext", "baseUrl": "."}, "include": ["src"]}"#),
+            ("jsconfig.json", "{\n}\n"),
+        ] {
+            assert!(plain_project_file(name, text.as_bytes()), "{name} {text}");
+        }
+        for (name, text) in [
+            ("package.json", "{oops"),
+            ("package.json", ""),
+            ("package.json", "[]"),
+            ("package.json", r#"{"type": "weird"}"#),
+            ("package.json", r#"{"type": 5}"#),
+            ("package.json", r#"{"a": 1, "a": 2}"#),
+            ("package.json", r#"{"x": {"a": 1, "a": 2}}"#),
+            ("package.json", r#"{"x": [{"a": 1, "a": 2}]}"#),
+            ("package.json", r#"{"exports": "./a.js"}"#),
+            ("package.json", r#"{"imports": {}}"#),
+            ("package.json", r#"{"browser": false}"#),
+            ("package.json", "// c\n{}"),
+            ("package.json", "{\"a\": 1,}"),
+            ("package.json", "\u{feff}{}"),
+            ("tsconfig.json", r#"{"extends": "./base.json"}"#),
+            ("tsconfig.json", r#"{"compilerOptions": {"paths": {}}}"#),
+            ("tsconfig.json", r#"{"compilerOptions": {"jsxFactory": "h"}}"#),
+            ("tsconfig.json", r#"{"compilerOptions": 5}"#),
+            ("jsconfig.json", r#"{"compilerOptions": {"importsNotUsedAsValues": "remove"}}"#),
+        ] {
+            assert!(!plain_project_file(name, text.as_bytes()), "{name} {text}");
         }
     }
 
