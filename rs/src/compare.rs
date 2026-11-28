@@ -6,7 +6,9 @@
 //!   line the gate takes must make yargs call the same command with the
 //!   same values, and nothing else;
 //! - `toLowerCase` and `trim` for every code point (rs/src/js.rs), but the
-//!   ones `lowercase_unsure` hands back;
+//!   ones `lowercase_unsure` hands back: the binary answers from the table
+//!   rs/unicode.gen.mjs recorded from bun (rs/src/unicode.rs), and this holds
+//!   it against the bun at hand, whatever toolchain built the test;
 //! - `os.tmpdir()` under the variables it reads;
 //! - `String(x)`, `x.toFixed(2)` and `Math.round(x)` for numbers of the kinds
 //!   OCR and coordinates give;
@@ -154,6 +156,7 @@ fn lower_case_and_white_space_as_bun_has_them() {
         theirs.insert(u32::from_str_radix(code, 16).unwrap(), (lower, space == "true"));
     }
     let mut wrong = Vec::new();
+    let mut answered = 0;
     for code in (0..=0x10ffffu32).filter(|c| !(0xd800..=0xdfff).contains(c)) {
         let c = char::from_u32(code).unwrap();
         let (their_lower, their_space) = theirs.get(&code).cloned().unwrap_or((c.to_string(), false));
@@ -164,8 +167,16 @@ fn lower_case_and_white_space_as_bun_has_them() {
         if ours.is_some() && ours.as_deref() != Some(their_lower.as_str()) {
             wrong.push(format!("U+{code:04X} lower: bun {their_lower:?}, the binary {ours:?}"));
         }
+        answered += usize::from(ours.is_some());
     }
-    assert!(wrong.is_empty(), "{} code points differ:\n{}", wrong.len(), wrong.iter().take(60).cloned().collect::<Vec<_>>().join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "{} code points differ (the binary answers from rs/src/unicode.rs: is it what this bun says? `bun rs/unicode.gen.mjs --check`):\n{}",
+        wrong.len(),
+        wrong.iter().take(60).cloned().collect::<Vec<_>>().join("\n")
+    );
+    // Every character of bun's Unicode but the few unsure ones.
+    assert!(answered > 290_000, "{answered}");
 }
 
 #[test]

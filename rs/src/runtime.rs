@@ -248,9 +248,11 @@ fn read_plain_dotenv(path: &Path) -> Result<Vec<(String, String)>, HandBack> {
 
 const BLANKS: [char; 2] = [' ', '\t'];
 
-/// True for text bun takes literally wherever it stands.
+/// True for text bun takes literally wherever it stands. (The controls are
+/// listed rather than asked of Rust's `is_control`, whose tables follow the
+/// toolchain; Unicode never changes these.)
 fn literal(text: &str) -> bool {
-    text.chars().all(|c| !c.is_control() && !matches!(c, '"' | '\'' | '`' | '$' | '\\') && (c == ' ' || !js::is_space(c)))
+    text.chars().all(|c| !matches!(c, '\0'..='\x1f' | '\x7f'..='\u{9f}' | '"' | '\'' | '`' | '$' | '\\') && (c == ' ' || !js::is_space(c)))
 }
 
 /// The value bun gives to what follows `=` on a line.

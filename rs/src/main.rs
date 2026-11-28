@@ -47,6 +47,8 @@ mod runtime;
 mod session;
 #[cfg(unix)]
 mod store;
+#[cfg(unix)]
+mod unicode;
 
 /// The package's JavaScript entry, relative to the package root: what `bin`
 /// in package.json names for both commands, run by bun (`#!/usr/bin/env bun`).

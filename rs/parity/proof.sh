@@ -9,8 +9,10 @@
 # just built for that platform ($RUSTIFY_PLATFORM names it; without it,
 # `uname` does).
 #
-# First rs/parity.json is checked to be what rs/parity.gen.mjs writes. Then
-# these run side by side, each into a log of its own:
+# First rs/parity.json is checked to be what rs/parity.gen.mjs writes, and
+# rs/src/unicode.rs, the lower case of every code point the binary answers
+# from, to be what this bun says (rs/unicode.gen.mjs). Then these run side by
+# side, each into a log of its own:
 #
 #   lane<n>   rs/parity.json split into lanes (rs/parity/lanes.mjs), every
 #             lane run twice: TypeScript against the binary (the binary may
@@ -28,8 +30,8 @@
 #   unit      cargo test in rs/: the unit tests, and rs/src/compare.rs, which
 #             holds the argument gate against the project's own yargs chain
 #             and the text and number helpers against bun. It builds the crate
-#             again from the same sources and Cargo.lock; it does not run the
-#             binary named above.
+#             again from the same sources and Cargo.lock, with the toolchain
+#             at hand; it does not run the binary named above.
 #
 # Every run of the runner gets a temp directory of its own (TMPDIR, TEMP and
 # TMP), removed afterwards. At the end one line is printed for each part that
@@ -71,6 +73,7 @@ esac
 lanes=${PARITY_LANES:-$default_lanes}
 
 node rs/parity.gen.mjs --check || exit 1
+bun rs/unicode.gen.mjs --check || exit 1
 
 # In $TMPDIR, which macOS's mktemp passes over without a template.
 logs=$(mktemp -d "${TMPDIR:-/tmp}/rds-proof.XXXXXX") || exit 1

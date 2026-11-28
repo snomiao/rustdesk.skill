@@ -4,6 +4,12 @@
 //!
 //! Where an exact copy would be long and the case is rare, a function
 //! answers `None` and the caller hands the invocation back.
+//!
+//! No answer depends on the Unicode tables of the Rust that built the binary:
+//! white space is listed here, lower case comes from rs/src/unicode.rs,
+//! recorded from bun (see `lowercase_unsure`).
+
+use crate::unicode;
 
 /// JavaScript's WhiteSpace and LineTerminator: what `trim` takes off and
 /// what `\s` matches (held against bun by rs/src/compare.rs).
@@ -40,29 +46,83 @@ pub fn is_object_member(name: &str) -> bool {
     OBJECT_MEMBERS.contains(&name)
 }
 
-/// Characters whose `toLowerCase` in the runtime is not what Rust's
-/// `to_lowercase` gives, or may not be in another runtime's release: the
-/// capital sigma, whose lower case depends on what is around it, and the
-/// blocks whose case pairs came with Unicode 14 or later. rs/src/compare.rs
-/// compares every other code point with bun's `toLowerCase`.
+/// Characters whose `toLowerCase` the binary does not answer for, because a
+/// runtime may give another lower case than the one recorded from bun 1.4 in
+/// rs/src/unicode.rs:
+///
+/// - the capital sigma, whose lower case depends on what is around it;
+/// - the blocks whose case pairs came with Unicode 14 or later, which a bun
+///   with an older ICU lower-cases otherwise or not at all (the Cyrillic of
+///   U+1C89, Unicode 16, among them). Every code point whose lower case is
+///   not the same in Unicode 13 (Python 3.9's tables) as in bun 1.4's 17 is
+///   in one of them;
+/// - every code point the table's Unicode leaves unassigned, which a later
+///   Unicode may give a lower case (Unicode 18 gave U+AB6C one);
+/// - every code point whose lower case in Rust's own tables is not the
+///   table's. Those tables follow the toolchain that built the binary; where
+///   two Unicodes disagree, runtimes of either may.
+///
+/// The answer itself always comes from the table, never from Rust's tables,
+/// so whatever toolchain built the binary, it answers the same where it
+/// answers at all, and hands back the rest. rs/src/compare.rs holds every
+/// code point it answers for against the bun at hand.
 pub fn lowercase_unsure(c: char) -> bool {
     matches!(c as u32,
         0x3a3 // Σ: σ or ς by its neighbours
+        | 0x1c80..=0x1c8f // Cyrillic Extended-C
         | 0x2c00..=0x2c5f // Glagolitic
         | 0xa720..=0xa7ff // Latin Extended-D
         | 0x10570..=0x105bf // Vithkuqi
         | 0x10d40..=0x10d8f // Garay
         | 0x16ea0..=0x16edf // Beria Erfe
         | 0x1e900..=0x1e95f // Adlam
-    )
+    ) || !assigned(c)
+        || !rust_agrees(c)
+}
+
+/// The table's lower case of `c`, `None` where that is `c` itself.
+fn table_lower(c: char) -> Option<&'static str> {
+    let at = unicode::LOWER.binary_search_by_key(&(c as u32), |&(code, _)| code).ok()?;
+    Some(unicode::LOWER[at].1)
+}
+
+/// Whether the table's Unicode assigns `c`.
+fn assigned(c: char) -> bool {
+    let code = c as u32;
+    // The last range that starts at `code` or before it.
+    let at = unicode::ASSIGNED.partition_point(|&(from, _)| from <= code);
+    at > 0 && code <= unicode::ASSIGNED[at - 1].1
+}
+
+/// Whether Rust's `to_lowercase`, from the toolchain's tables, gives what
+/// the table says.
+fn rust_agrees(c: char) -> bool {
+    match table_lower(c) {
+        Some(lower) => c.to_lowercase().eq(lower.chars()),
+        None => c.to_lowercase().eq([c]),
+    }
+}
+
+/// `c` lower-cased by the table, onto `out`.
+fn push_lower(out: &mut String, c: char) {
+    match table_lower(c) {
+        Some(lower) => out.push_str(lower),
+        None => out.push(c),
+    }
 }
 
 /// `text.toLowerCase()`, or `None` where the runtime's answer is not certain.
+/// Without a capital sigma, whose lower case is the only one that depends
+/// on its neighbours, that is the lower case of each character in turn.
 pub fn to_lower(text: &str) -> Option<String> {
-    if text.chars().any(lowercase_unsure) {
-        return None;
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if lowercase_unsure(c) {
+            return None;
+        }
+        push_lower(&mut out, c);
     }
-    Some(text.to_lowercase())
+    Some(out)
 }
 
 /// `Math.round(x)`: the nearest integer, halves upwards.
@@ -318,13 +378,14 @@ pub fn math_max(a: f64, b: f64) -> f64 {
 /// makes of such a character (σ or ς, or a letter of its own script), it is
 /// none of them either, and no other character's lower case depends on
 /// what is around it, so whether one of them is found does not change.
+/// (U+FFFF is a noncharacter, unassigned, so unsure itself.)
 pub fn lower_for_fixed(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if lowercase_unsure(c) {
             out.push('\u{ffff}');
         } else {
-            out.extend(c.to_lowercase());
+            push_lower(&mut out, c);
         }
     }
     out
@@ -602,6 +663,8 @@ mod tests {
     fn lower_case_for_the_fixed_texts() {
         assert_eq!(lower_for_fixed("ΣΥΝΔΕΣΗ OK"), "\u{ffff}υνδε\u{ffff}η ok");
         assert_eq!(lower_for_fixed("İD"), "i\u{307}d");
+        // Unassigned in Unicode 17, a capital in 18; Unicode 16's TJE.
+        assert_eq!(lower_for_fixed("\u{ab6c}\u{1df40}\u{1c89}Ok"), "\u{ffff}\u{ffff}\u{ffff}ok");
         assert!(fixed_alphabet("リモートID パスワードが必要です 記憶する 确定 確定 Remote ID"));
         assert!(!fixed_alphabet("σ"));
         assert_eq!(slice_utf16_lossy("ab😀c", 3), "ab\u{fffd}");
@@ -689,5 +752,41 @@ mod tests {
         assert_eq!(slice_utf16("ab", 200), Some("ab"));
         assert_eq!(trim("\u{feff} a \u{3000}\n"), "a");
         assert_eq!(trim("\u{180e}a"), "\u{180e}a");
+    }
+
+    #[test]
+    fn the_table_is_in_order() {
+        assert!(unicode::LOWER.windows(2).all(|w| w[0].0 < w[1].0));
+        assert!(unicode::ASSIGNED.iter().all(|&(a, b)| a <= b));
+        assert!(unicode::ASSIGNED.windows(2).all(|w| w[0].1 + 1 < w[1].0));
+        assert!(unicode::LOWER.iter().all(|&(code, lower)| char::from_u32(code).is_some_and(assigned) && lower.chars().all(assigned)));
+        assert!(assigned('\0') && assigned('\u{16ea0}') && assigned('\u{f0000}') && !assigned('\u{ab6c}') && !assigned('\u{1df40}') && !assigned('\u{10ffff}'));
+    }
+
+    #[test]
+    fn lower_case_comes_from_the_table() {
+        assert_eq!(to_lower("İD Kelvin \u{212a}"), Some("i\u{307}d kelvin k".into()));
+        assert_eq!(to_lower("ΑΒΓ"), Some("αβγ".into()));
+        assert_eq!(to_lower("ΣΑ"), None);
+        // U+AB6C and U+1DF40 are capitals in Unicode 18 (Rust 1.100) and
+        // unassigned in bun's 17; U+1C89 came with 16.
+        for unsure in ["\u{ab6c}", "\u{1df40}", "\u{1c89}", "\u{10ffff}", "\u{ffff}"] {
+            assert_eq!(to_lower(unsure), None, "{unsure:?}");
+        }
+        // Wherever the binary answers, the answer is the table's, whatever
+        // this toolchain's tables say; where they disagree, it answers nothing.
+        let mut disagree = Vec::new();
+        for c in (0..=0x10ffffu32).filter_map(char::from_u32) {
+            let table: String = table_lower(c).map_or_else(|| c.to_string(), String::from);
+            if let Some(ours) = to_lower(&c.to_string()) {
+                assert_eq!(ours, table, "U+{:04X}", c as u32);
+            }
+            if c.to_lowercase().collect::<String>() != table {
+                assert!(lowercase_unsure(c), "U+{:04X}", c as u32);
+                disagree.push(format!("U+{:04X}", c as u32));
+            }
+        }
+        let (major, minor, update) = char::UNICODE_VERSION;
+        eprintln!("this toolchain's Unicode {major}.{minor}.{update}, the table's {}: they disagree on {} code point(s) {}", unicode::VERSION, disagree.len(), disagree.join(" "));
     }
 }
