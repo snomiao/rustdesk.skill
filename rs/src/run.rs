@@ -208,6 +208,16 @@ pub fn stdout_unwritable() -> bool {
             return true;
         }
     }
+    // macOS does not say so of a named pipe whose reader has gone, but
+    // writing nothing to it fails (on Linux writing nothing to a pipe does
+    // nothing).
+    if kind == libc::S_IFIFO {
+        let nothing = [0u8; 1];
+        // SAFETY: a write of no bytes.
+        if unsafe { libc::write(1, nothing.as_ptr().cast(), 0) } < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EPIPE) {
+            return true;
+        }
+    }
     #[cfg(target_os = "linux")]
     if kind == libc::S_IFCHR && st.st_rdev == libc::makedev(1, 7) {
         return true;
