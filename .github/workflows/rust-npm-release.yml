@@ -1,12 +1,14 @@
 # Builds the Rust `rustdesk-skill` binary for every platform, packs it together
-# with the TypeScript the package ships, and checks on Linux, macOS and
-# Windows (x64 and arm64) that `bun i -g` / `npm i -g` gives working
-# `rustdesk-skill` and `rds` commands.
+# with the TypeScript the package ships, checks on Linux x64, macOS arm64 and
+# Windows x64 that the binary behaves like the TypeScript, and checks on
+# Linux, macOS and Windows (x64 and arm64) that `bun i -g` / `npm i -g` gives
+# working `rustdesk-skill` and `rds` commands.
 #
-# Nothing is ported yet: the binary hands every command to
-# bin/rustdesk-skill.ts, and the smoke lines marked [handback] check on every
-# platform that it did. They run only `--help` and usage errors, which yargs
-# answers before any command starts a browser.
+# On Linux and macOS the binary answers every command itself in its plain
+# spellings; on Windows it hands every invocation to bin/rustdesk-skill.ts.
+# No case and no smoke line opens a browser or runs OCR: the parity cases
+# talk to stand-ins for playwright-cli, python3, xclip and pbcopy
+# (rs/parity/shim.mjs).
 #
 # It does not publish.
 #
@@ -29,6 +31,8 @@ on:
       - "**.mjs"
       - "**.cjs"
       - "package.json"
+      - "bun.lock"
+      - ".gitattributes"
       - ".github/workflows/rust-npm-release.yml"
   workflow_dispatch:
     inputs:
@@ -44,13 +48,38 @@ jobs:
       manifest: rs/Cargo.toml
       bins: rustdesk-skill
       version: ${{ inputs.version }}
-      # Both commands are the same binary, and it hands everything to
+      # Both commands are the same binary; --help is yargs's, so it goes to
       # bin/rustdesk-skill.ts. (--version is no use as the check: installed
       # with bun, yargs cannot find the package and prints "unknown".)
       smoke: rustdesk-skill --help
       smoke-expect: Recent remote IDs
+      # Rust against TypeScript, on the binaries just built for each of these
+      # platforms: rs/parity/proof.sh checks that rs/parity.json is what
+      # rs/parity.gen.mjs writes, then runs in lanes the comparison, the check
+      # of which cases the binary answers itself, the comparison again with
+      # stdout and stderr on a terminal (not on Windows), and cargo test, which
+      # holds the argument gate against the project's own yargs chain and the
+      # text and number helpers against bun. python3 is there for the
+      # runner's terminal, never for OCR.
+      parity-platforms: '["linux-x64", "darwin-arm64", "win32-x64"]'
+      # A case starts bun, node and a shell several times; on Windows every
+      # program starts slowly.
+      parity-timeout-minutes: 60
+      parity: >-
+        bun install --frozen-lockfile
+        && sh rs/parity/proof.sh "$RUSTIFY_PARITY" "$RUSTIFY_BIN_DIR/rustdesk-skill"
+      # After installing, on every platform. --help and usage errors are
+      # yargs's on every platform. `list` (no recent ids in the smoke test's
+      # empty home), a key chord with an unknown modifier, text that needs
+      # Shift, and `connect` with no password known are answered by the
+      # binary on Linux and macOS before anything would start a browser, and
+      # handed back on Windows.
       smoke-extra: |
         [handback] rds --help => Recent remote IDs
         [handback] rds connect --help => --remember-password
         [1] [handback] rds => Not enough non-option arguments
         [1] [handback] rds no-such-command => Unknown argument: no-such-command
+        [native:linux,darwin] [handback:win32] rds list => []
+        [1] [native:linux,darwin] [handback:win32] rds key hyper+x => unknown modifier: hyper
+        [4] [native:linux,darwin] [handback:win32] rds type Secret@1 => shift-requiring chars [S@]
+        [3] [native:linux,darwin] [handback:win32] rustdesk-skill connect 123456789 => no password for id 123456789
