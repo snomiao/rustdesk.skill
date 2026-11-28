@@ -662,7 +662,12 @@ R("pw: an acting step prints a mebibyte and succeeds", ["scroll", "5"], { pw: { 
 R("pw: an acting step fails and prints a mebibyte and one byte", ["scroll", "5"], { pw: { mousewheel: { code: 1, big: 1048577 } }, capture: "files", skip: BIG });
 R("pw: an acting step prints two megabytes", ["scroll", "5"], { pw: { mousewheel: { big: 2000000 } }, ...PAST("a"), skip: BIG });
 R("pw: an acting step prints two megabytes on stderr", ["scroll", "5"], { pw: { mousewheel: { bigerr: 2000000 } }, ...PAST("b"), skip: BIG });
-R("pw: a step that never stops printing", ["scroll", "5"], { env: { RDS_PW_BIN: "sh -c yes" }, capture: "files", normalize: [["(?:y\\r?\\n){500000,}y?", "<y, past a mebibyte>"]], skip: { win32: "sh is not a program the runtime starts there" } });
+// How many y's bun keeps differs from run to run, and the rule makes any
+// number of them past half a million the same. On a terminal a line ends in
+// CR LF, and on macOS in CR CR LF wherever the terminal's output queue was
+// full (every 341 lines of y): the rule saw no run that long there, and
+// compared the y's one by one. Without the CRs they are one run again.
+R("pw: a step that never stops printing", ["scroll", "5"], { env: { RDS_PW_BIN: "sh -c yes" }, capture: "files", normalize: [["\\r+\\n", "\n"], ["(?:y\\n){500000,}y?", "<y, past a mebibyte>"]], skip: { win32: "sh is not a program the runtime starts there" } });
 R("key: the keyup prints two megabytes", ["key", "ctrl+x"], { pw: { keyup: { big: 2000000 } }, ...PAST("a"), skip: BIG });
 R("disconnect: goto prints two megabytes", ["disconnect"], { pw: { goto: { big: 2000000 } }, ...PAST("a"), skip: BIG });
 R("type: the step prints two megabytes on stderr", ["type", "hello"], { pw: { type: { code: 3, bigerr: 2000000 } }, ...PAST("b"), skip: BIG });

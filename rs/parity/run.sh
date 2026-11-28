@@ -118,19 +118,24 @@ errors="$TMPDIR/stderr.$$"
 set +e
 case $stdout_to in
   gone)
+    # A pipe whose reader has gone before the command starts, made without
+    # waiting for anyone: the FIFO opened for reading and writing on 3 (an
+    # open that never waits), then for writing on 4 (which has a reader in 3
+    # and does not wait either), then 3 closed. No process comes and goes,
+    # so nothing can interrupt an open: a reader started in the background
+    # that left before the writer's open had seen it made that open wait, and
+    # SIGCHLD then failed it ("Interrupted system call", on macOS).
     fifo="$TMPDIR/stdout.$$"
     mkfifo "$fifo"
-    # A reader that opens the pipe and leaves at once; the writer's end
-    # opens when the reader's has, and is used once the reader is gone.
-    (: < "$fifo") &
-    reader=$!
-    exec 3> "$fifo"
-    wait "$reader"
+    exec 3<> "$fifo"
+    exec 4> "$fifo"
+    exec 3<&-
     rm -f "$fifo"
-    # Not exec'd: macOS's sh would hand the command `_`, its own path.
-    env -u _ "$@" 1>&3 2> "$errors"
+    # Not exec'd: macOS's sh would hand the command `_`, its own path. The
+    # command gets the pipe as stdout and nothing more.
+    env -u _ "$@" 1>&4 4>&- 2> "$errors"
     code=$?
-    exec 3>&-
+    exec 4>&-
     ;;
   full)
     env -u _ "$@" > /dev/full 2> "$errors"
