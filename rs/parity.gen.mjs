@@ -359,7 +359,7 @@ add("screenshot: the step fails", ["ss"], { pw: { screenshot: { code: 1, err: "n
 // what the binary takes from a program (1,000,000 bytes), so it hands back.
 // (With more than a mebibyte, how much of it bun keeps, and so how long the
 // TypeScript's report is, depends on how fast it reads.)
-add("screenshot: the step prints more than the binary takes", ["ss"], { pw: { screenshot: { big: 1020000 } }, back: "a program that prints a mebibyte or nearly: bun stops it at a mebibyte and says so in its own words", late: true, after: [SHOT] });
+add("screenshot: the step prints just under bun's mebibyte", ["ss"], { pw: { screenshot: { big: 1020000 } }, after: [SHOT] });
 add("screenshot: without a session name", ["ss"], { env: { RDS_SESSION_NAME: null }, after: [SHOT] });
 add("screenshot: a PNG of 0 by 0", ["ss"], { pw: { screenshot: { png: [0, 0] } }, after: [SHOT] });
 add("screenshot: a PNG of the largest size", ["ss"], { pw: { screenshot: { png: [4294967295, 4294967295] } }, after: [SHOT] });
@@ -556,6 +556,205 @@ add("x screenshot: a file named in Japanese", ["ss", "スクショ 1.png"], { af
 add("x move: far coordinates", ["move", "123456789012345", "-123456789012345"]);
 add("x move: a far coordinate on a retina screen", ["move", "123456789012345", "1"], { pw: { screenshot: { png: [2560, 1440] } } });
 add("x scroll: a large negative fraction", ["scroll", "-999999999999999.999999"], { back: "it reads as -1e15: a number of that size is written in JavaScript's own way, not ported" });
+
+// ═══════════════════════════ the verifier's cases (v …) ═══════════════════════════
+//
+// Written by the independent verification of the port (rustify's
+// docs/porting.md, step 8), aimed at what the port had missed. 21 of them
+// found the binary answering differently: a step printing between 1,000,000
+// bytes and bun's mebibyte, and, once connect had acted, a capital sigma on
+// the remote screen, a viewport or OCR output of an unusual shape, and a
+// password field at -0.
+
+const V = (name, args, o = {}) => add(`v ${name}`, args, o);
+const VC = (name, args, o = {}) => add(`v connect: ${name}`, args, { needs: ["ocr"], ...o, after: [...(o.after || []), ...STORE(o.dir)] });
+const LINK = { win32: "Git Bash's ln -s makes no link" };
+
+V("pw: an acting step prints 1,020,000 bytes and succeeds", ["scroll", "5"], { pw: { mousewheel: { big: 1020000 } } });
+V("pw: type prints 1,040,000 bytes and succeeds", ["type", "hello"], { pw: { type: { big: 1040000 } } });
+V("pw: keyup prints 1,010,000 bytes", ["key", "ctrl+x"], { pw: { keyup: { big: 1010000 } } });
+V("disconnect: goto prints 1,030,000 bytes", ["disconnect"], { pw: { goto: { big: 1030000 } } });
+V("pw: an acting step fails with 1,001,000 bytes of stdout", ["scroll", "5"], { pw: { mousewheel: { code: 1, big: 1001000 } }, capture: "files" });
+VC("--new, open prints 1,020,000 bytes", ["c", "1", "pw", "--new"], { pw: { open: { big: 1020000 } } });
+VC("--new, the last address step prints 1,020,000 bytes", ["c", "1", "pw", "--new"], { pw: { "eval:url": { big: 1020000, out: '### Result\n"https://rustdesk.com/web/"\n' } } });
+V("click: mousemove prints 1,000,500 bytes", ["click", "OK"], { ...OCR, ocr: { boxes: [pbox("OK", 10, 10)] }, pw: { mousemove: { big: 1000500 } } });
+
+VC("--new, a viewport in strings", ["c", "1", "pw", "--new"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, {}], pw: { screenshot: { png: [2560, 1440] }, ...VIEW('### Result\n{"w": "1280", "h": "720"}\n') } });
+VC("not on the client, a viewport too large", ["c", "1", "pw"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, {}], pw: { ...URL('"about:blank"'), ...VIEW('### Result\n{"w": 1e400, "h": 720}\n') } });
+VC("--new, a viewport of true", ["c", "1", "pw", "--new"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, {}], pw: VIEW('### Result\n{"w": true, "h": true}\n') });
+VC("already on the client, a viewport in strings (before any act)", ["c", "1", "pw"], { ocr: { boxes: HOME_SCREEN }, pw: VIEW('### Result\n{"w": "1280", "h": "720"}\n'), back: "a viewport in strings before the first act: handed back", late: true });
+
+VC("--new, a box without text at the second OCR", ["c", "1", "pw", "--new"], { ocr: [{}, { out: '[{"x1": 5}]' }, {}, {}] });
+VC("--new, OCR output that is an object at the second OCR", ["c", "1", "pw", "--new"], { ocr: [{}, { out: '{"text": "a"}' }, {}, {}] });
+VC("--new, a capital sigma on screen after the first step", ["c", "1", "pw", "--new"], { ocr: [{}, { boxes: [pbox("ΣΥΝΔΕΣΗ", 10, 10)] }, {}, {}] });
+VC("--new, corners in strings at the third OCR", ["c", "1", "pw", "--new"], { ocr: [{}, {}, { out: '[{"text": "Password Required", "x1": "500", "y1": "250", "x2": "700", "y2": "280"}]' }, {}] });
+VC("--new, non-JSON OCR cut inside a character", ["c", "1", "pw", "--new"], { ocr: [{}, { out: `${"x".repeat(199)}😀 more` }, {}, {}] });
+VC("--new, a confidence of 1e400 at the last OCR", ["c", "1", "pw", "--new"], { ocr: [{}, {}, {}, { out: '[{"text": "x", "confidence": 1e400}]' }] });
+VC("a Greek remote desktop at the last OCR, already on the client", ["c", "1", "pw"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, { boxes: [pbox("ΑΡΧΕΙΟ", 10, 10), pbox("ΕΠΕΞΕΡΓΑΣΙΑ", 80, 10)] }] });
+VC("a Greek remote desktop at the last OCR, remembering the password", ["c", "1", "pw", "--remember-password"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, { boxes: [pbox("ΣΥΝΔΕΣΗ", 10, 10)] }] });
+VC("two password fields at the top, the second at -0", ["c", "1", "pw"], { ocr: [{}, {}, { boxes: [pbox("パスワード", 100, 0, 40, 20), { text: "パスワード", confidence: 0.9, x1: 300, y1: -0.2, x2: 340, y2: 20 }] }] });
+VC("two password fields at the top from Vision, -0.0 and 0", ["c", "1", "pw"], { env: { RDS_OCR: "vision" }, ocr: [{}, {}, { out: '[{"text": "パスワード", "confidence": 0.9, "x1_norm": 0.1, "y1_norm": 0.0, "x2_norm": 0.2, "y2_norm": 0.05}, {"text": "パスワード", "confidence": 0.9, "x1_norm": 0.5, "y1_norm": -0.0, "x2_norm": 0.6, "y2_norm": 0.05}]' }] });
+
+V("scroll: stdin given to rds is not passed on", ["scroll", "5"], { stdin: "typed\n" });
+V("ocr: stdin given to rds is not passed on to python3", ["ocr"], { ...OCR, stdin: "x\n" });
+V("runtime: .env value with # inside", ["list"], { files: { ".env": "RDS_CONFIG_DIR=<ROOT>/a#b\n" }, setup: ["mkdir -p <ROOT>/a && printf '[\"hash\"]' > <ROOT>/a/recents.json"] });
+V("runtime: .env names in two cases in two files", ["scroll", "5"], { env: { PARITY_SHOW: "Foo_X FOO_X" }, files: { ".env": "FOO_X=upper\n", ".env.local": "Foo_X=mixed\n" } });
+V("runtime: .env empty value reaches playwright-cli", ["scroll", "5"], { env: { PARITY_SHOW: "FOO_EMPTY FOO_Q" }, files: { ".env": "FOO_EMPTY=\nFOO_Q=''\n" } });
+V("runtime: .env tab-padded value", ["list"], { files: { ".env": "RDS_CONFIG_DIR=\t <ROOT>/a \t\n" }, setup: ["mkdir -p <ROOT>/a && printf '[\"tab\"]' > <ROOT>/a/recents.json"] });
+V("runtime: .env with a line of blanks", ["list"], { files: { ".env": "   \n\t\nRDS_CONFIG_DIR=<ROOT>/a\n" }, setup: ["mkdir -p <ROOT>/a && printf '[\"blank\"]' > <ROOT>/a/recents.json"] });
+V("runtime: .env value in Japanese", ["list"], { files: { ".env": "RDS_CONFIG_DIR=<ROOT>/日本\n" }, setup: ["mkdir -p <ROOT>/日本 && printf '[\"ja\"]' > <ROOT>/日本/recents.json"] });
+V("runtime: .env.local a link to nowhere", ["list"], { setup: ["ln -s nowhere .env.local"], back: "a .env.local that is a dangling link: handed back", skip: LINK });
+V("runtime: .env with a value quoted and a word after", ["list"], { files: { ".env": "RDS_CONFIG_DIR='<ROOT>/a' x\n" }, back: DOTENV });
+VC("RDS_CONFIG_DIR through a missing folder and ..", ["c", "1", "pw", "--remember-password"], { env: { RDS_CONFIG_DIR: "<ROOT>/x/../conf" }, dir: "<ROOT>/conf", after: ["ls -A <ROOT> | grep -v -x -e calls.log -e cache", "ls -ld <ROOT>/x <ROOT>/conf 2>&1 | cut -c1-10"] });
+VC("RDS_CONFIG_DIR three folders deep: modes of each", ["c", "1", "pw", "--remember-password"], { env: { RDS_CONFIG_DIR: "<ROOT>/c1/c2/c3" }, dir: "<ROOT>/c1/c2/c3", after: ["ls -ld <ROOT>/c1 <ROOT>/c1/c2 <ROOT>/c1/c2/c3 | cut -c1-10", "ls -l <ROOT>/c1/c2/c3 | cut -c1-10"] });
+VC("a password store with a key given twice", ["c", "1", "new", "--remember-password"], { setup: PASSWORDS('{"1": "a", "b": "x", "1": "b"}') });
+VC("index keys around 2^32 in the store", ["c", "4294967295", "pw", "--remember-password"], { setup: PASSWORDS('{"b": "x", "10": "y", "4294967294": "z", "2": "w", "01": "v"}') });
+VC("the remembered password used, last of two", ["c", "1"], { setup: PASSWORDS('{"1": "first", "1": "second"}') });
+VC("an id with a newline and a tab", ["c", "1\n2\t3", "pw"]);
+V("ocr: a carriage return inside a text", ["ocr"], { ...OCR, ocr: { boxes: [pbox("a\rb", 1, 2), pbox("c\u0000d", 3, 4)] } });
+V("ocr: invalid UTF-8 inside a JSON string", ["ocr"], { ...OCR, ocr: { out: '[{"text": "a\\xe0\\x80b\\xf4\\x90\\x80\\x80c\\xc2", "x1": 1}]' }, capture: "files" });
+V("pw: a failing step with more bytes that are not UTF-8", ["scroll", "5"], { pw: { mousewheel: { code: 1, err: "\\xe0\\x80\\x80|\\xf4\\x90\\x80\\x80|\\xf8\\x88|\\xc2|\\xe2\\x82x|\\xf0\\x90\\x80|\\xed\\xbf\\xbf|\\xef\\xbf\\xbe|\\xc1\\xbf|\\xe0\\xa0" } }, capture: "files" });
+V("move: halves below zero", ["move", "-0.5", "-1.5"]);
+V("move: 2.5 -2.5 on a retina screen", ["move", "2.5", "-2.5"], { pw: { screenshot: { png: [2560, 1440] } } });
+V("move: a viewport of -0", ["move", "10", "20"], { pw: { screenshot: { png: [2000, 1000] }, ...VIEW('### Result\n{"w": -0, "h": 500}\n') } });
+V("click: a dotted capital I", ["click", "i̇stanbul"], { ...OCR, ocr: { boxes: [pbox("İSTANBUL", 5, 5)] } });
+V("click: -0 in the clicked message", ["click", "edge"], { ...OCR, ocr: { boxes: [{ text: "edge", x1: -0.3, y1: -0.2, x2: 40, y2: 20 }] } });
+V("key: ctrl+Constructor", ["key", "ctrl+Constructor"], { back: "a name Object.prototype has: not ported" });
+V("key: a word that names a command", ["key", "status"]);
+V("type: a word that names a command", ["type", "list"]);
+V("ocr: a confidence of 1e21", ["ocr"], { ...OCR, ocr: { boxes: [pbox("big", 1, 1, 1, 1, 1e21)] }, back: "a number toFixed writes in its own way: not ported", late: true });
+V("ocr --json: a confidence of 0.1+0.2", ["ocr", "--json"], { ...OCR, ocr: { out: '[{"text": "x", "confidence": 0.30000000000000004, "x1": 1}]' }, back: "a number of 17 digits: not ported", late: true });
+V("ocr --json: Paddle's own rounding", ["ocr", "--json"], { ...OCR, ocr: { out: '[{"text": "OK", "confidence": 0.9983, "x1": 10, "y1": 20, "x2": 50, "y2": 40}, {"text": "接続", "confidence": 0.7071, "x1": 700, "y1": 135, "x2": 740, "y2": 153}]\n' } });
+V("ocr --json: Vision -0.0 corners", ["ocr", "--json", "--ocr", "vision"], { ...OCR, ocr: { out: '[{"text": "top", "confidence": 1.0, "x1_norm": -0.0, "y1_norm": -0.0, "x2_norm": 0.1234, "y2_norm": 0.0567}]\n' } });
+V("ocr: --lang ' ja'", ["ocr", "--lang", " ja"], OCR);
+V("ocr: --lang=en=x", ["ocr", "--lang=en=x"], OCR);
+V("ocr: output with CR LF", ["ocr"], { ...OCR, ocr: { out: '[{"text": "a", "x1": 1}]\r\n' } });
+V("screenshot: a name with a trailing slash", ["ss", "d/"], { setup: ["mkdir d"], back: "a file that cannot be written: bun's own words", late: true });
+V("scroll: RDS_SESSION_DIR a link to a folder", ["scroll", "1"], { env: { RDS_SESSION_DIR: "<ROOT>/link" }, setup: ["mkdir <ROOT>/real && ln -s <ROOT>/real <ROOT>/link"], skip: LINK });
+V("scroll: RDS_SESSION_DIR a dangling link", ["scroll", "1"], { env: { RDS_SESSION_DIR: "<ROOT>/dangling" }, setup: ["ln -s <ROOT>/nowhere <ROOT>/dangling"], back: "a session directory that is a dangling link: bun's own words", skip: LINK });
+V("status: the address step killed by a signal", ["status"], { pw: { "eval:url": { kill: "SIGKILL" } }, skip: { win32: "no signals" } });
+V("type: 131,000 characters", ["type", "b".repeat(131000)]);
+V("list: a big list in Japanese", ["list"], { setup: [`mkdir -p <HOME>/.config/rustdesk-skill && printf '%s' ${sq(JSON.stringify(Array.from({ length: 5000 }, (_, i) => `id-${i}-日本`)))} > <HOME>/.config/rustdesk-skill/recents.json`] });
+V("paste: a text with Unicode line separators", ["paste", "a b c\r\nd"], CLIP);
+V("click: --nth 1 with a single match", ["click", "OK", "--nth", "1"], { ...OCR, ocr: { boxes: [pbox("OK", 10, 10)] } });
+V("click: ambiguous and then the second screenshot fails", ["click", "OK"], { ...OCR, ocr: { boxes: [pbox("OK", 10, 10), pbox("ok", 50, 50)] }, pw: { screenshot: [{}, { code: 3, err: "gone\n" }] } });
+V("session: RDS_SESSION_NAME of dashes and dots", ["scroll", "1"], { env: { RDS_SESSION_NAME: "--.a..b--" } });
+V("session: a branch named with Unicode", ["scroll", "1"], { env: { RDS_SESSION_NAME: null }, setup: ["git init -q -b 'ブランチ/x' && git -c user.name=p -c user.email=p@example.com commit -q --allow-empty -m x"] });
+
+// ═══════════════════════════ the repairs (r …) ═══════════════════════════
+//
+// One or more cases for each repair after the verification: bun's buffer
+// for a program's output (a mebibyte a stream, the program then stopped
+// with SIGTERM and the step failed), a program that cannot be started,
+// stdout that cannot be written, and everything connect may meet once it
+// has acted, where it can no longer hand back.
+
+const R = (name, args, o = {}) => add(`r ${name}`, args, o);
+const RC = (name, args, o = {}) => add(`r connect: ${name}`, args, { needs: ["ocr"], ...o, after: [...(o.after || []), ...STORE(o.dir)] });
+// How much bun keeps of a stream past its buffer depends on how its reads
+// fell (a little more than a mebibyte), in the TypeScript as in the binary.
+// The report of it is more than the runner's own pipes take: into files.
+const PAST = (letter) => ({ capture: "files", normalize: [[`${letter}{1048577,}`, `<${letter}, past a mebibyte>`]] });
+const BIG = { win32: "a report of more than a mebibyte, more than the runner's own pipe takes there" };
+const BUF = "OCR (paddle|vision) failed: spawnSync python3 ENOBUFS";
+
+R("pw: an acting step prints a mebibyte and succeeds", ["scroll", "5"], { pw: { mousewheel: { big: 1048576 } } });
+R("pw: an acting step fails and prints a mebibyte and one byte", ["scroll", "5"], { pw: { mousewheel: { code: 1, big: 1048577 } }, capture: "files", skip: BIG });
+R("pw: an acting step prints two megabytes", ["scroll", "5"], { pw: { mousewheel: { big: 2000000 } }, ...PAST("a"), skip: BIG });
+R("pw: an acting step prints two megabytes on stderr", ["scroll", "5"], { pw: { mousewheel: { bigerr: 2000000 } }, ...PAST("b"), skip: BIG });
+R("pw: a step that never stops printing", ["scroll", "5"], { env: { RDS_PW_BIN: "sh -c yes" }, capture: "files", normalize: [["(?:y\\n){500000,}y?", "<y, past a mebibyte>"]], skip: { win32: "sh is not a program the runtime starts there" } });
+R("key: the keyup prints two megabytes", ["key", "ctrl+x"], { pw: { keyup: { big: 2000000 } }, ...PAST("a"), skip: BIG });
+R("disconnect: goto prints two megabytes", ["disconnect"], { pw: { goto: { big: 2000000 } }, ...PAST("a"), skip: BIG });
+R("type: the step prints two megabytes on stderr", ["type", "hello"], { pw: { type: { code: 3, bigerr: 2000000 } }, ...PAST("b"), skip: BIG });
+R("paste: the clipboard program prints two megabytes", ["paste", "x"], { ...CLIP, clip: { big: 2000000 } });
+RC("--new, open prints two megabytes: goto", ["c", "1", "pw", "--new"], { pw: { open: { big: 2000000 } } });
+RC("--new, the second OCR prints two megabytes", ["c", "1", "pw", "--new"], { ocr: [{}, { big: 2000000 }] });
+RC("--new, the viewport step prints two megabytes", ["c", "1", "pw", "--new"], { ocr: [{ boxes: HOME_SCREEN }, {}, {}, {}], pw: { "eval:viewport": { big: 2000000 } }, ...PAST("a"), skip: BIG });
+RC("--new, the last address step prints two megabytes", ["c", "1", "pw", "--new"], { pw: { "eval:url": { big: 2000000 } } });
+RC("already on the client, OCR prints two megabytes before any act", ["c", "1", "pw"], { ocr: { big: 2000000 }, back: "a step that only looks and prints more than a mebibyte: taken again by the JavaScript", late: true });
+RC("a remembered password longer than a program's argument may be", ["c", "1"], { ocr: [{}, {}, { boxes: DIALOG }, {}], setup: ["mkdir -p <HOME>/.config/rustdesk-skill && f=<HOME>/.config/rustdesk-skill/passwords.json && printf '{\"1\": \"' > $f && head -c 140000 /dev/zero | tr '\\000' x >> $f && printf '\"}' >> $f"], after: ["wc -c < <HOME>/.config/rustdesk-skill/passwords.json"] });
+RC("--new, a directory where the screenshot should be", ["c", "1", "pw", "--new"], { pw: { screenshot: { png: "dir" } } });
+
+// A viewport of any shape, once open has acted (a retina screen, so that it counts).
+const RETINA = { screenshot: { png: [2560, 1440] } };
+for (const [what, text] of [
+  ["lists", '{"w": [1280], "h": [[["720"]]]}'],
+  ["an object with a toString of its own", '{"w": {"toString": 1}, "h": 720}'],
+  ["an object with a valueOf of its own", '{"w": {"valueOf": 1}, "h": 720}'],
+  ["hexadecimal and blanks in strings", '{"w": " 0x500 ", "h": "\\t720\\n"}'],
+  ["Infinity in a string", '{"w": "Infinity", "h": 720}'],
+  ["words and an exponent", '{"w": "abc", "h": "7.2e2"}'],
+  ["a list of two", '{"w": [1, 2], "h": 720}'],
+  ["a height with a toString of null", '{"w": 1280, "h": {"toString": null}}'],
+  ["negative", '{"w": -1280, "h": -720}'],
+  ["a lone surrogate", '{"w": "\\ud800", "h": 720}'],
+]) {
+  RC(`--new, a viewport of ${what}`, ["c", "1", "pw", "--new"], { ocr: [{ boxes: HOME_SCREEN }, { boxes: [pbox("接続", 700, 135, 40, 18)] }, {}, {}], pw: { ...RETINA, ...VIEW(`### Result\n${text}\n`) } });
+}
+
+// OCR output of any shape, once open has acted: at the second OCR (the
+// connect button's), unless it says.
+for (const [what, out] of [
+  ["null", "null"],
+  ["a number", "5"],
+  ["true", "true"],
+  ["false", "false"],
+  ["a string", '"ab"'],
+  ["an empty string", '""'],
+  ["a list holding null", "[null]"],
+  ["a list of a number, a string and a list", '[5, "s", [1]]'],
+  ["a text of null", '[{"text": null}]'],
+  ["a text that is a number", '[{"text": 5}]'],
+  ["a text with a trim of its own", '[{"text": {"trim": "x"}}]'],
+  ["a text with a trim that is a list", '[{"text": {"trim": [1]}}]'],
+  ["a text with a trim that is an object", '[{"text": {"trim": {}}}]'],
+  ["a text with a trim of 1e21", '[{"text": {"trim": 1e21}}]'],
+  ["a text that is a list", '[{"text": ["Connect"]}]'],
+  ["a good box, then a text of null", '[{"text": "Connect", "x1": 1}, {"text": null}]'],
+  ["a corner with a toString of its own", '[{"text": "Connect", "x1": {"toString": 1}}]'],
+  ["corners as lists, hexadecimal and blanks", '[{"text": "Connect", "x1": ["700"], "y1": [["135"]], "x2": "0x2e4", "y2": " 153 "}]'],
+  ["Vision corners in strings, a list, true and null", '[{"text": "Connect", "x1_norm": "0.5", "y1_norm": [0.25], "x2_norm": true, "y2_norm": null}]'],
+  ["corners of 1e300", '[{"text": "Connect", "x1": 1e300, "y1": -1e300, "x2": 2e300, "y2": 0}]'],
+  ["corners that are words", '[{"text": "Connect", "x1": "abc", "y1": "1e400"}]'],
+  ["corners of twenty-one digits", '[{"text": "Connect", "x1": 123456789012345680000, "y1": 2e20, "x2": 123456789012345680000, "y2": 1e21}]'],
+  ["corners of seventeen digits", '[{"text": "Connect", "x1": 1152921504606846976, "y1": 9007199254740993, "x2": 1152921504606846976, "y2": 9007199254740993}]'],
+  ["a lone surrogate in the text", '[{"text": "\\ud800 Connect \\udfff"}]'],
+  ["__proto__ and a trim beside the text", '[{"text": "Connect", "__proto__": {"x1": 9}, "trim": 5, "x1": 700}]'],
+  ["a member nested deeper than the binary keeps", `[{"text": "Connect", "x1": 700, "extra": ${"[".repeat(300)}${"]".repeat(300)}}]`],
+  ["Glagolitic and Adlam beside the button", '[{"text": "Ⰰⰰ Connect 𞤀", "x1": 700}]'],
+  ["a capital sigma in a word", '[{"text": "ΣΥΝΔΕΣΗ Σ", "x1": 9}, {"text": "Connect", "x1": 700}]'],
+]) {
+  RC(`--new, OCR output: ${what}`, ["c", "1", "pw", "--new"], { ocr: [{}, { out }, {}, {}] });
+}
+RC("--new, OCR output cut inside a character after the first act", ["c", "1", "pw", "--new"], { ocr: [{}, {}, { out: `${"é".repeat(199)}😀 more` }, {}] });
+
+// The password field among boxes at NaN and infinite heights, which only
+// JavaScriptCore's own sort orders as it does (no title: every one counts).
+const AT = (y1) => ({ text: "password field", confidence: 0.9, x1: 100, y1, x2: 200, y2: 120 });
+RC("a field picked among ten at NaN and infinite heights", ["c", "1", "pw"], { ocr: [{}, {}, { boxes: [pbox("Please enter", 10, 10), ...["a", 1e308 * 10, 30, 20, "x", 25, -1e308 * 10, 5, "y", 7].map(AT), pbox("OK", 10, 400)] }, {}] });
+RC("a field picked among four at NaN heights", ["c", "1", "pw"], { ocr: [{}, {}, { boxes: [pbox("Please enter", 10, 10), ...[30, "a", 10, "b"].map(AT)] }, {}] });
+RC("a title without a height and no field", ["c", "1", "pw"], { ocr: [{}, {}, { out: '[{"text": "Password Required", "x1": 500, "y1": 250, "x2": 700, "y2": "tall"}]' }, {}] });
+RC("a Greek remote desktop at every OCR", ["c", "1", "pw"], { ocr: [{ boxes: [...HOME_SCREEN, pbox("ΣΥΝΔΕΣΗ", 10, 10)] }, { boxes: [pbox("ΣΥΝΔΕΣΗ Connect", 700, 135)] }, { boxes: [pbox("ΚΩΔΙΚΟΣ Password Required", 500, 250), pbox("ΚΩΔΙΚΟΣ password", 500, 350), pbox("OK", 690, 460)] }, { boxes: [pbox("ΑΡΧΕΙΟ", 10, 10)] }] });
+R("status: a Greek remote desktop", ["status"], { ...OCR, ocr: { boxes: [pbox("ΑΡΧΕΙΟ ΕΠΕΞΕΡΓΑΣΙΑ", 10, 10)] } });
+R("status: Glagolitic on the home screen", ["status"], { ...OCR, ocr: { boxes: [pbox("Ⰰ Remote ID", 10, 10)] } });
+
+// stdout that cannot be written: printJson fails in bun's words, with a
+// stack trace and exit code 1, which only the JavaScript can say; console.log
+// (ocr's lines) does not fail.
+const GONE = { env: { PARITY_STDOUT: "gone" }, skip: { win32: "a pipe whose reader has gone, made with mkfifo, which Git Bash has not" } };
+const FULL = { env: { PARITY_STDOUT: "full" }, skip: { darwin: "no /dev/full", win32: "no /dev/full" } };
+const UNWRITTEN = "printJson cannot write stdout: bun's report, with a stack trace";
+R("list: stdout's reader has gone", ["list"], { ...GONE, setup: RECENTS('["1"]'), back: UNWRITTEN });
+R("list: nothing recorded, stdout's reader has gone", ["list"], { ...GONE, back: UNWRITTEN });
+R("list: stdout is a full disk", ["list"], { ...FULL, setup: RECENTS('["1"]'), back: UNWRITTEN });
+R("status: stdout's reader has gone", ["status"], { ...GONE, needs: ["ocr"], back: UNWRITTEN, late: true });
+R("status: without a session name, stdout's reader has gone", ["status"], { ...GONE, needs: ["ocr"], env: { ...GONE.env, RDS_SESSION_NAME: null }, back: UNWRITTEN, late: true });
+R("ocr --json: stdout's reader has gone", ["ocr", "--json"], { ...GONE, needs: ["ocr"], ocr: { boxes: OCR_BOXES }, back: UNWRITTEN, late: true });
+R("ocr: stdout's reader has gone (console.log does not fail)", ["ocr"], { ...GONE, needs: ["ocr"], ocr: { boxes: OCR_BOXES } });
+R("scroll: stdout's reader has gone (nothing is written there)", ["scroll", "5"], GONE);
+RC("stdout's reader has gone: back before the first act", ["c", "1", "pw"], { ...GONE, ...FLOW, back: UNWRITTEN });
+RC("stdout is a full disk: back before the first act", ["c", "1", "pw", "--new"], { ...FULL, ...FLOW, back: UNWRITTEN });
+RC("no password, stdout's reader has gone", ["c", "1"], GONE);
 
 // ═══════════════════════════ systems ═══════════════════════════
 //
