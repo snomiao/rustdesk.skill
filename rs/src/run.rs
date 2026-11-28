@@ -218,9 +218,6 @@ pub fn stdout_unwritable() -> bool {
             return true;
         }
     }
-    #[cfg(target_os = "linux")]
-    if kind == libc::S_IFCHR && st.st_rdev == libc::makedev(1, 7) {
-        return true;
-    }
-    false
+    // /dev/full, on Linux.
+    cfg!(target_os = "linux") && kind == libc::S_IFCHR && st.st_rdev == libc::makedev(1, 7)
 }
