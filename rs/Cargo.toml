@@ -13,3 +13,8 @@ path = "src/main.rs"
 opt-level = 3
 lto = "thin"
 strip = true
+
+# `access(2)`, to find a program as bun's lookup does. Only the C library
+# that std links already.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
