@@ -21,6 +21,8 @@ mod js_fallback;
 mod args;
 #[cfg(unix)]
 mod commands;
+#[cfg(all(unix, test))]
+mod compare;
 #[cfg(unix)]
 mod connect;
 #[cfg(unix)]
