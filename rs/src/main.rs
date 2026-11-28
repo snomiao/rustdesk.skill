@@ -21,7 +21,19 @@ mod js;
 mod json;
 #[cfg(unix)]
 #[allow(dead_code)] // used once the commands are switched over
+mod proc;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
+mod pw;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
+mod run;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
 mod runtime;
+#[cfg(unix)]
+#[allow(dead_code)] // used once the commands are switched over
+mod session;
 
 /// The package's JavaScript entry, relative to the package root.
 const JS_ENTRY: &str = "bin/rustdesk-skill.ts";
