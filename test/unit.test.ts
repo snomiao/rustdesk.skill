@@ -32,7 +32,7 @@ import {
   screenshotToCss,
 } from "../src/pw";
 import { sanitizeSessionName, defaultSessionName, resolveSessionName } from "../src/session";
-import { needsShiftWarning, shiftChars, type, ShiftMangleError } from "../src/screen";
+import { needsShiftWarning, shiftChars, type, ShiftMangleError, textLanded } from "../src/screen";
 import { pickPasswordField, homeScreenPresent } from "../src/connect";
 import { buildParser, type CliDeps } from "../bin/rustdesk-skill";
 
@@ -250,12 +250,34 @@ describe("type shift-warning", () => {
     process.env.RDS_PW_BIN = "true"; // /usr/bin/true — succeeds, no-op
     process.env.RDS_SESSION_NAME = "test-session";
     try {
-      expect(() => type("hello-123")).not.toThrow();
-      expect(() => type("Secret@1", { force: true })).not.toThrow();
+      // verify:false — the stub backend can't screenshot; verification is covered by textLanded.
+      expect(() => type("hello-123", { verify: false })).not.toThrow();
+      expect(() => type("Secret@1", { force: true, verify: false })).not.toThrow();
     } finally {
       delete process.env.RDS_PW_BIN;
       delete process.env.RDS_SESSION_NAME;
     }
+  });
+});
+
+// --- type/paste: verify the text landed on screen (issue #4) ---
+
+describe("textLanded", () => {
+  const b = (text: string, y: number, x = 0): Box => ({ text, conf: 1, x, y, w: 10, h: 10 });
+  test("new text on screen counts as landed", () => {
+    expect(textLanded([b("C:\\>", 100)], [b("C:\\> dir appdata", 100)], "dir appdata")).toBe(true);
+  });
+  test("nothing changed means NOT landed", () => {
+    const shot = [b("C:\\>", 100)];
+    expect(textLanded(shot, shot, "dir appdata")).toBe(false);
+  });
+  test("text already on screen before doesn't count", () => {
+    const before = [b("dir appdata", 50), b("C:\\>", 100)];
+    expect(textLanded(before, before, "dir appdata")).toBe(false);
+    expect(textLanded(before, [...before, b("dir appdata", 150)], "dir appdata")).toBe(true);
+  });
+  test("ignores case, spacing and OCR box splits", () => {
+    expect(textLanded([], [b("DIR", 100, 0), b("app data", 100, 50)], "dir appdata")).toBe(true);
   });
 });
 
@@ -371,7 +393,15 @@ describe("CLI parsing + dispatch", () => {
   test("type --force passes force flag", () => {
     const { deps, calls } = spyDeps();
     buildParser(["type", "Hello@", "--force"], deps).parse();
-    expect(calls.type).toEqual(["Hello@", { force: true }]);
+    expect(calls.type).toEqual(["Hello@", { force: true, verify: true }]);
+  });
+
+  test("type/paste --no-verify turns verification off", () => {
+    const { deps, calls } = spyDeps();
+    buildParser(["type", "dir", "--no-verify"], deps).parse();
+    expect(calls.type).toEqual(["dir", { force: false, verify: false }]);
+    buildParser(["paste", "dir", "--no-verify"], deps).parse();
+    expect(calls.paste).toEqual(["dir", { verify: false }]);
   });
 
   test("click --nth --contains", () => {
