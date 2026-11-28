@@ -97,9 +97,9 @@ fn answer(args: &[String]) {
                 // Meant not to happen: everything the binary does not
                 // imitate is looked for before the first step that acts,
                 // and every outcome of what comes after it is answered.
-                // What is left (rs/parity/README or the ledger names it) is
-                // stopped without another step; running it again would
-                // repeat what was done.
+                // What is left (the parity ledger names it) is stopped
+                // without another step; running it again would repeat what
+                // was done.
                 run.error_line("[rustdesk-skill] stopped: this build does not handle what it met after acting on the page; nothing further was done");
                 1
             }
