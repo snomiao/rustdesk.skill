@@ -85,23 +85,25 @@ start() {
     echo $? > "$logs/$name.exit"
   ) &
 }
-# One run of the runner, in a temp directory of its own.
+# One run of the runner, in a temp directory of its own. (Its variables
+# have names of their own: sh has no local ones, and a lane's verdict must
+# not be overwritten by the run after it.)
 run_in() {
-  dir=$(mktemp -d "$logs/run.XXXXXX")
-  dir_for_node=$(cygpath -m "$dir" 2> /dev/null || printf '%s' "$dir")
-  TMPDIR=$dir_for_node TEMP=$dir_for_node TMP=$dir_for_node node "$runner" "$@"
-  code=$?
-  rm -rf "$dir"
-  return $code
+  run_dir=$(mktemp -d "$logs/run.XXXXXX")
+  run_dir_for_node=$(cygpath -m "$run_dir" 2> /dev/null || printf '%s' "$run_dir")
+  TMPDIR=$run_dir_for_node TEMP=$run_dir_for_node TMP=$run_dir_for_node node "$runner" "$@"
+  run_code=$?
+  rm -rf "$run_dir"
+  return $run_code
 }
 ts="sh rs/parity/run.sh bun bin/rustdesk-skill.ts"
 rs="env RUSTDESK_SKILL_PACKAGE_ROOT=$root sh rs/parity/run.sh $binary"
 lane() {
   cases=$logs_for_node/lane-$1.json
-  code=0
-  run_in --cases "$cases" --ts "$ts" --rs "$rs" || code=1
-  run_in --cases "$cases" --rs "sh rs/parity/run.sh $binary" --handback RUSTDESK_SKILL_PACKAGE_ROOT=bin/rustdesk-skill.ts || code=1
-  return $code
+  lane_code=0
+  run_in --cases "$cases" --ts "$ts" --rs "$rs" || lane_code=1
+  run_in --cases "$cases" --rs "sh rs/parity/run.sh $binary" --handback RUSTDESK_SKILL_PACKAGE_ROOT=bin/rustdesk-skill.ts || lane_code=1
+  return $lane_code
 }
 tty_lane() {
   run_in --cases "$logs_for_node/lane-$1.json" --ts "$ts" --rs "$rs" --tty stdout,stderr
@@ -152,6 +154,12 @@ for name in $runs; do
     unit) grep '^test result' "$logs/$name.log" | sed "s/^/$name: /" ;;
   esac
 done
+# Both runs of every lane ran the same cases: a count that does not add up
+# is a run whose verdict went missing.
+if [ "$failed" = 0 ] && [ "$same" != "$((native + back))" ]; then
+  echo "parity: the comparison counted $same case(s), the hand-back check $((native + back)): a lane's result is missing"
+  failed=1
+fi
 if [ "$failed" = 0 ]; then
   echo "parity: all $same case(s) behave the same; $native answered by the binary, $back handed back to the JavaScript, as the cases say"
   if ! $windows; then echo "parity on a terminal (stdout and stderr): all $tty case(s) behave the same"; fi
