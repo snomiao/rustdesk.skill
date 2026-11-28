@@ -17,10 +17,10 @@
 // Every call appends to the file PARITY_LOG names: the role and its
 // arguments, its working directory, what it read on stdin, and a digest of
 // its environment (every variable but the package root that only the
-// binary's side is given), followed by the values of the RDS_* variables and
-// of those PARITY_SHOW names. A case prints that log in an `after` line, so
-// both implementations must have asked the same things, in the same order,
-// from the same place, with the same environment.
+// binary's side is given, and PWD and OLDPWD), followed by the values of the
+// RDS_* variables and of those PARITY_SHOW names. A case prints that log in
+// an `after` line, so both implementations must have asked the same things,
+// in the same order, from the same place, with the same environment.
 //
 // The answers (all optional) come from variables of the case, as JSON:
 //
@@ -126,7 +126,11 @@ function log(lines) {
 function placeless(value) {
   const root = path.dirname(path.resolve(logFile));
   let text = value;
-  for (const spelling of new Set([root, root.replace(/\\/g, "/"), root.replace(/\//g, "\\")])) {
+  const spellings = [root, root.replace(/\\/g, "/"), root.replace(/\//g, "\\")];
+  // As MSYS tools write it (Git Bash's PWD): /c/<dir>/…
+  const drive = /^([A-Za-z]):[\\/](.*)$/.exec(root);
+  if (drive) spellings.push(`/${drive[1].toLowerCase()}/${drive[2].replace(/\\/g, "/")}`);
+  for (const spelling of new Set(spellings)) {
     text = text.split(spelling).join("<ROOT>");
     if (process.platform === "win32") text = text.replace(new RegExp(spelling.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "<ROOT>");
   }
@@ -134,8 +138,12 @@ function placeless(value) {
 }
 
 function environment() {
+  // PWD and OLDPWD are rs/parity/run.sh's (both sides start through it), and
+  // in Git Bash they are spelt by MSYS's mounts (/tmp/…), which the runner
+  // and this digest cannot take for the run's directory; the working
+  // directory is compared on its own (`cwd`).
   const names = Object.keys(process.env)
-    .filter((name) => name !== "RUSTDESK_SKILL_PACKAGE_ROOT")
+    .filter((name) => !["RUSTDESK_SKILL_PACKAGE_ROOT", "PWD", "OLDPWD"].includes(name))
     .sort();
   const digest = createHash("sha256")
     .update(names.map((name) => `${name}=${placeless(process.env[name])}`).join("\0"))
