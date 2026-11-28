@@ -355,7 +355,7 @@ add("screenshot: no file is written", ["ss"], { pw: { screenshot: { png: "none" 
 add("screenshot: too short to be a PNG", ["ss"], { pw: { screenshot: { png: "short" } }, after: [FILES] });
 add("screenshot: a directory where the PNG should be", ["ss"], { pw: { screenshot: { png: "dir" } }, back: "a screenshot that cannot be read: bun's own words", late: true });
 add("screenshot: the step fails", ["ss"], { pw: { screenshot: { code: 1, err: "no page\n" } }, after: [FILES] });
-add("screenshot: the step prints too much", ["ss"], { pw: { screenshot: { big: 2000000 } }, back: "a step that prints more than a mebibyte: bun stops it and says so in its own words", late: true });
+add("screenshot: the step prints too much", ["ss"], { pw: { screenshot: { big: 2000000 } }, back: "a step that prints more than a mebibyte: bun stops it and says so in its own words", late: true, skip: { win32: "the TypeScript's report there, with the mebibyte bun kept, is more than the runner's own pipe takes (ENOBUFS)" } });
 add("screenshot: without a session name", ["ss"], { env: { RDS_SESSION_NAME: null }, after: [SHOT] });
 add("screenshot: a PNG of 0 by 0", ["ss"], { pw: { screenshot: { png: [0, 0] } }, after: [SHOT] });
 add("screenshot: a PNG of the largest size", ["ss"], { pw: { screenshot: { png: [4294967295, 4294967295] } }, after: [SHOT] });

@@ -4409,7 +4409,10 @@
    "after": [
     "sort -u <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
    ],
-   "handback": "a step that prints more than a mebibyte: bun stops it and says so in its own words"
+   "handback": "a step that prints more than a mebibyte: bun stops it and says so in its own words",
+   "skip": {
+    "win32": "the TypeScript's report there, with the mebibyte bun kept, is more than the runner's own pipe takes (ENOBUFS)"
+   }
   },
   {
    "name": "screenshot: without a session name",
