@@ -7,7 +7,8 @@ use std::fs;
 use crate::args::Backend;
 use crate::js;
 use crate::json::{self, Json};
-use crate::proc::{self, Failed, Found};
+use crate::jsv::{self, Coerce};
+use crate::proc::{self, Found, NotStarted};
 use crate::pw;
 use crate::run::{Run, Stop, R};
 
@@ -26,7 +27,9 @@ pub fn resolve_backend(run: &Run, flag: Option<Backend>) -> R<Backend> {
     if let Some(backend) = flag {
         return Ok(backend);
     }
-    let choice = js::to_lower(&run.machine.var("RDS_OCR").unwrap_or_default()).ok_or(Stop::HandBack)?;
+    // Compared with two ASCII words only: a character whose lower case is
+    // not certain here cannot make either.
+    let choice = js::lower_for_fixed(&run.machine.var("RDS_OCR").unwrap_or_default());
     Ok(match choice.as_str() {
         "paddle" => Backend::Paddle,
         "vision" => Backend::Vision,
@@ -115,8 +118,16 @@ pub fn normalize_boxes(raw: &Json, png_w: f64, png_h: f64) -> R<Vec<OcrBox>> {
     Ok(out)
 }
 
-/// `runOcr(pngPath, opts)`
-fn run_ocr(run: &mut Run, png: &str, backend: Backend, lang: &str, png_w: f64, png_h: f64) -> R<Vec<OcrBox>> {
+/// What `runOcr` got from the script: the parsed output, or the
+/// TypeScript's error.
+enum Raw {
+    Parsed(Json),
+    /// Not JSON: `OCR (<backend>) produced non-JSON output: …`
+    NotJson(String),
+}
+
+/// `runOcr(pngPath, opts)` up to `JSON.parse`.
+fn run_ocr_raw(run: &mut Run, png: &str, backend: Backend, lang: &str) -> R<Raw> {
     let script_name = if backend == Backend::Vision { "ocr-mac.py" } else { "ocr.py" };
     let script = js::join(&[&run.machine.package_root, "ocr", script_name]);
     if fs::metadata(&script).is_err() {
@@ -124,34 +135,63 @@ fn run_ocr(run: &mut Run, png: &str, backend: Backend, lang: &str, png_w: f64, p
     }
     let lang = lang_arg(backend, if lang.is_empty() { "ja,en" } else { lang })?;
     let name = backend.name();
+    let not_found = || Stop::error(format!("OCR ({name}) failed: Executable not found in $PATH: \"python3\""));
     let program = match proc::find(run.machine, "python3")? {
         Found::Program(program) => program,
-        Found::Missing => return Err(Stop::error(format!("OCR ({name}) failed: Executable not found in $PATH: \"python3\""))),
+        Found::Missing => return Err(not_found()),
     };
-    let output = match proc::run(run.machine, &program, &[script, png.to_string(), lang], None, None) {
-        Ok(output) => output,
-        Err(Failed::Big | Failed::Spawn) => return Err(Stop::HandBack),
+    let live = run.is_live();
+    let output = match proc::start(run.machine, &program, &[script, png.to_string(), lang], None, None) {
+        Ok(started) => started.finish().map_err(|_| Stop::HandBack)?,
+        Err(_) if !live => return Err(Stop::HandBack),
+        Err(NotStarted::Missing) => return Err(not_found()),
+        Err(NotStarted::Said(message)) => return Err(Stop::error(format!("OCR ({name}) failed: {message}"))),
+        Err(NotStarted::Other) => return Err(Stop::HandBack),
     };
+    // Before the first act the JavaScript takes this step again: a stream
+    // past bun's buffer goes back.
+    if output.overflow && !live {
+        return Err(Stop::HandBack);
+    }
     if output.status != Some(0) {
-        let what = if output.stderr.is_empty() { "unknown error" } else { &output.stderr };
+        let error = output.error_message("python3");
+        let what = if !output.stderr.is_empty() {
+            output.stderr.clone()
+        } else {
+            error.unwrap_or_else(|| "unknown error".into())
+        };
         return Err(Stop::error(format!("OCR ({name}) failed: {what}")));
     }
     let text = if output.stdout.is_empty() { "[]" } else { &output.stdout };
-    match json::parse(text) {
-        Ok(raw) => normalize_boxes(&raw, png_w, png_h),
+    let parsed = if live { json::parse_js(text) } else { json::parse(text) };
+    match parsed {
+        Ok(raw) => Ok(Raw::Parsed(raw)),
         Err(json::Parse::Invalid) => {
-            let head = js::slice_utf16(&output.stdout, 200).ok_or(Stop::HandBack)?;
-            Err(Stop::error(format!("OCR ({name}) produced non-JSON output: {head}")))
+            let head = if live { js::slice_utf16_lossy(&output.stdout, 200) } else { js::slice_utf16(&output.stdout, 200).ok_or(Stop::HandBack)?.to_string() };
+            Ok(Raw::NotJson(format!("OCR ({name}) produced non-JSON output: {head}")))
         }
         Err(json::Parse::Unsure) => Err(Stop::HandBack),
     }
 }
 
-/// `ocr(opts)` of src/screen.ts: a screenshot, written to
-/// <tmpdir>/rds-ocr-<pid>.png (and left there), then OCR.
-pub fn ocr(run: &mut Run, backend: Option<Backend>, lang: &str) -> R<Vec<OcrBox>> {
+/// `runOcr(pngPath, opts)`
+fn run_ocr(run: &mut Run, png: &str, backend: Backend, lang: &str, png_w: f64, png_h: f64) -> R<Vec<OcrBox>> {
+    match run_ocr_raw(run, png, backend, lang)? {
+        Raw::Parsed(raw) => normalize_boxes(&raw, png_w, png_h),
+        Raw::NotJson(message) => Err(Stop::error(message)),
+    }
+}
+
+/// `join(tmpdir(), \`rds-ocr-${process.pid}.png\`)`
+pub fn png_path(run: &Run) -> String {
+    js::join(&[&run.machine.tmpdir(), &format!("rds-ocr-{}.png", std::process::id())])
+}
+
+/// The screenshot, written to <tmpdir>/rds-ocr-<pid>.png (and left there),
+/// as `ocr()` of src/screen.ts does before OCR.
+fn shot_for_ocr(run: &mut Run) -> R<(String, f64, f64)> {
     let shot = pw::screenshot_png(run)?;
-    let png = js::join(&[&run.machine.tmpdir(), &format!("rds-ocr-{}.png", std::process::id())]);
+    let png = png_path(run);
     if !png.starts_with('/') {
         return Err(Stop::HandBack);
     }
@@ -160,11 +200,135 @@ pub fn ocr(run: &mut Run, backend: Option<Backend>, lang: &str) -> R<Vec<OcrBox>
     if !existed {
         run.made(png.clone().into());
     }
+    Ok((png, f64::from(shot.width), f64::from(shot.height)))
+}
+
+/// `ocr(opts)` of src/screen.ts: a screenshot, written to
+/// <tmpdir>/rds-ocr-<pid>.png (and left there), then OCR.
+pub fn ocr(run: &mut Run, backend: Option<Backend>, lang: &str) -> R<Vec<OcrBox>> {
+    let (png, width, height) = shot_for_ocr(run)?;
     let backend = match backend {
         Some(backend) => backend,
         None => resolve_backend(run, None)?,
     };
-    run_ocr(run, &png, backend, lang, f64::from(shot.width), f64::from(shot.height))
+    run_ocr(run, &png, backend, lang, width, height)
+}
+
+/// A box as connect has it: what `normalizeBoxes` made of any output, in
+/// JavaScript's numbers, with the TypeError `b.text.trim()` throws when the
+/// text is not a string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsBox {
+    pub text: Result<String, String>,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl From<OcrBox> for JsBox {
+    fn from(b: OcrBox) -> JsBox {
+        JsBox { text: Ok(b.text), x: b.x, y: b.y, w: b.w, h: b.h }
+    }
+}
+
+fn coerce(value: Option<&Json>) -> R<f64> {
+    match value {
+        None => Ok(0.0),
+        Some(value) => jsv::to_number(value).map_err(|why| match why {
+            Coerce::NoDefault => Stop::error("No default value"),
+            // Not imitated, and after the first act: the stop.
+            Coerce::Deep => Stop::HandBack,
+        }),
+    }
+}
+
+/// `r[name] ?? 0`
+fn or_zero(object: &Json, name: &str) -> Option<&'static Json> {
+    static ZERO: Json = Json::Num(0.0);
+    match object.get(name) {
+        None | Some(Json::Null) => Some(&ZERO),
+        Some(_) => None,
+    }
+}
+
+/// `normalizeBoxes(raw, pngW, pngH)` for any value `JSON.parse` gives.
+pub fn normalize_js(raw: &Json, png_w: f64, png_h: f64) -> R<Vec<JsBox>> {
+    let no_text = || jsv::text_trim_error(None).unwrap();
+    let elements: Vec<Option<&Json>> = match raw {
+        Json::Arr(items) => items.iter().map(Some).collect(),
+        // A string is iterated by code points: each a string, with no
+        // corners and no text.
+        Json::Str(text) => text.chars().map(|_| None).collect(),
+        Json::Obj(_) | Json::Deep(false) => return Err(Stop::error("{} is not iterable")),
+        Json::Null => return Err(Stop::error("null is not an object (evaluating 'r of raw')")),
+        Json::Num(_) => return Err(Stop::error("number is not iterable")),
+        Json::Bool(b) => return Err(Stop::error(format!("{b} is not iterable"))),
+        Json::Deep(true) => return Err(Stop::HandBack),
+    };
+    let mut out = Vec::with_capacity(elements.len());
+    for element in elements {
+        let object = match element {
+            Some(Json::Null) => return Err(Stop::error("null is not an object (evaluating 'r.x1_norm')")),
+            Some(object @ Json::Obj(_)) => object,
+            // A number, a string, a list: no member of either kind.
+            _ => {
+                out.push(JsBox { text: Err(no_text()), x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
+                continue;
+            }
+        };
+        let value = |name: &str| or_zero(object, name).or_else(|| object.get(name));
+        let (x1, y1, x2, y2) = if matches!(object.get("x1_norm"), None | Some(Json::Null)) {
+            // `r.x1 ?? 0`, …: turned into numbers by Math.round and the
+            // subtractions below, in this order.
+            (coerce(value("x1"))?, coerce(value("y1"))?, coerce(value("x2"))?, coerce(value("y2"))?)
+        } else {
+            (coerce(object.get("x1_norm"))? * png_w, coerce(value("y1_norm"))? * png_h, coerce(value("x2_norm"))? * png_w, coerce(value("y2_norm"))? * png_h)
+        };
+        let text = match jsv::text_trim_error(object.get("text")) {
+            None => match object.get("text") {
+                Some(Json::Str(text)) => Ok(text.clone()),
+                _ => unreachable!("a string"),
+            },
+            Some(error) => Err(error),
+        };
+        out.push(JsBox { text, x: js::math_round(x1), y: js::math_round(y1), w: js::math_round(x2 - x1), h: js::math_round(y2 - y1) });
+    }
+    Ok(out)
+}
+
+/// `ocr()` as connect and the connection check call it: before the first
+/// act, what the binary does not imitate goes back (the JavaScript takes the
+/// screenshot and the OCR again); after it, the boxes as JavaScript makes
+/// them of whatever the script printed.
+pub fn ocr_js(run: &mut Run) -> R<Vec<JsBox>> {
+    let (png, width, height) = shot_for_ocr(run)?;
+    let backend = resolve_backend(run, None)?;
+    if !run.is_live() {
+        return Ok(run_ocr(run, &png, backend, "ja,en", width, height)?.into_iter().map(JsBox::from).collect());
+    }
+    match run_ocr_raw(run, &png, backend, "ja,en")? {
+        Raw::Parsed(raw) => normalize_js(&raw, width, height),
+        Raw::NotJson(message) => Err(Stop::error(message)),
+    }
+}
+
+/// `findAny(boxes, candidates)` of src/connect.ts for its fixed texts:
+/// `matchText(boxes, c, { contains: true })` for each candidate in turn,
+/// whose `filter` calls `b.text.trim()` on every box first.
+pub fn find_any_js<'b>(boxes: &'b [JsBox], candidates: &[&str]) -> R<Option<&'b JsBox>> {
+    debug_assert!(candidates.iter().all(|c| js::fixed_alphabet(c)));
+    if let Some(error) = boxes.iter().find_map(|b| b.text.as_ref().err()) {
+        return Err(Stop::error(error));
+    }
+    let texts: Vec<String> = boxes.iter().map(|b| js::lower_for_fixed(js::trim(b.text.as_deref().unwrap_or_default()))).collect();
+    for candidate in candidates {
+        let q = js::lower_for_fixed(js::trim(candidate));
+        if let Some(at) = texts.iter().position(|t| t.contains(&q)) {
+            return Ok(Some(&boxes[at]));
+        }
+    }
+    Ok(None)
 }
 
 /// `matchText(boxes, query, opts)`: the box, how many matched, whether that
@@ -192,15 +356,9 @@ pub fn box_center(b: &OcrBox) -> (f64, f64) {
     (js::math_round(b.x + b.w / 2.0), js::math_round(b.y + b.h / 2.0))
 }
 
-/// `findAny(boxes, candidates)` of src/connect.ts: substring matches, the
-/// candidates in order.
-pub fn find_any<'b>(boxes: &'b [OcrBox], candidates: &[&str]) -> R<Option<&'b OcrBox>> {
-    for candidate in candidates {
-        if let (Some(found), _, _) = match_text(boxes, candidate, true, None)? {
-            return Ok(Some(found));
-        }
-    }
-    Ok(None)
+/// `boxCenter(b)` of a box as connect has it.
+pub fn center(b: &JsBox) -> (f64, f64) {
+    (js::math_round(b.x + b.w / 2.0), js::math_round(b.y + b.h / 2.0))
 }
 
 /// `JSON.stringify(boxes, null, 2)`

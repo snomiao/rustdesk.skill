@@ -12,21 +12,30 @@
 //! and one that is neither a script nor a binary all hand back.
 //!
 //! Output is decoded as UTF-8 with U+FFFD for what is not, as bun's
-//! `encoding: "utf8"` does. bun stops a program whose output on a stream
-//! passes a mebibyte (ENOBUFS, after the next read: 1,064,960 bytes of
-//! stdout in a test with bun 1.4.0) and reports what it had; a stream of
-//! more than `MOST` bytes is `Big`, which the binary does not imitate.
+//! `encoding: "utf8"` does. bun reads stdout and stderr until both end, a
+//! read at a time (at most 64 KiB, what a pipe holds), and once either
+//! stream holds more than `MAX_BUFFER` bytes (node's `maxBuffer`, 1 MiB) it
+//! sends the program SIGTERM, stops reading and waits for it: the result has
+//! the error ENOBUFS, the output read so far (a little more than a mebibyte:
+//! how much depends on how the reads fell, in bun as here) and the status
+//! the program ended with, which is no status when the signal ended it.
+//! `start` and `Started::finish` do the same. A program that cannot be
+//! started has no status and no output; bun says why in `error.message`.
 
 use std::fs;
 use std::io::{ErrorKind, Read as _, Write as _};
-use std::os::unix::process::CommandExt as _;
+use std::os::fd::AsRawFd as _;
+use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 use crate::runtime::Machine;
 use crate::HandBack;
 
-pub const MOST: usize = 1_000_000;
+/// node's default `maxBuffer` for `spawnSync`, which bun keeps.
+pub const MAX_BUFFER: usize = 1024 * 1024;
+/// What one read takes at most.
+const READ: usize = 64 * 1024;
 
 pub struct Program {
     /// The file bun starts.
@@ -41,18 +50,37 @@ pub enum Found {
     Missing,
 }
 
+/// What `spawnSync` returns, for a program that was started.
 pub struct Output {
-    /// The exit code; `None` when a signal ended the program.
+    /// `res.status`: the exit code, `None` when a signal ended the program.
     pub status: Option<i32>,
+    /// `res.error` is ENOBUFS: a stream passed `MAX_BUFFER`.
+    pub overflow: bool,
     pub stdout: String,
     pub stderr: String,
 }
 
-pub enum Failed {
-    /// The program printed more than `MOST` bytes.
-    Big,
-    /// It could not be started, or its output not be read.
-    Spawn,
+impl Output {
+    /// `res.error?.message` of a program that ran: bun's words for ENOBUFS.
+    pub fn error_message(&self, name: &str) -> Option<String> {
+        self.overflow.then(|| format!("spawnSync {name} ENOBUFS (stdout or stderr buffer reached maxBuffer size limit)"))
+    }
+}
+
+/// A program bun could not start.
+pub enum NotStarted {
+    /// ENOENT: gone since `find` saw it.
+    Missing,
+    /// `res.error.message` for an error whose words are known (E2BIG).
+    Said(String),
+    /// Any other error: its words are not known here.
+    Other,
+}
+
+/// A started program whose output is still to be read.
+pub struct Started {
+    child: Child,
+    writer: Option<std::thread::JoinHandle<()>>,
 }
 
 fn executable(path: &Path) -> bool {
@@ -124,8 +152,9 @@ pub fn find(machine: &Machine, name: &str) -> Result<Found, HandBack> {
     Ok(Found::Missing)
 }
 
-/// `spawnSync(name, args, { cwd, input, encoding: "utf8", env: process.env })`
-pub fn run(machine: &Machine, program: &Program, args: &[String], cwd: Option<&str>, input: Option<&[u8]>) -> Result<Output, Failed> {
+/// The start of `spawnSync(name, args, { cwd, input, encoding: "utf8", env:
+/// process.env })`.
+pub fn start(machine: &Machine, program: &Program, args: &[String], cwd: Option<&str>, input: Option<&[u8]>) -> Result<Started, NotStarted> {
     let mut command = Command::new(&program.path);
     command.arg0(&program.name).args(args);
     if let Some(cwd) = cwd {
@@ -135,7 +164,11 @@ pub fn run(machine: &Machine, program: &Program, args: &[String], cwd: Option<&s
         command.env(key, value);
     }
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|_| Failed::Spawn)?;
+    let mut child = command.spawn().map_err(|err| match err.raw_os_error() {
+        Some(libc::ENOENT) => NotStarted::Missing,
+        Some(libc::E2BIG) => NotStarted::Said(format!("E2BIG: argument list too long, posix_spawn '{}'", program.name)),
+        _ => NotStarted::Other,
+    })?;
     let stdin = child.stdin.take();
     let input = input.map(<[u8]>::to_vec);
     let writer = std::thread::spawn(move || {
@@ -144,14 +177,80 @@ pub fn run(machine: &Machine, program: &Program, args: &[String], cwd: Option<&s
             let _ = stdin.write_all(&input);
         }
     });
-    let output = child.wait_with_output().map_err(|_| Failed::Spawn)?;
-    let _ = writer.join();
-    if output.stdout.len() > MOST || output.stderr.len() > MOST {
-        return Err(Failed::Big);
+    Ok(Started { child, writer: Some(writer) })
+}
+
+impl Started {
+    /// The rest of `spawnSync`: the output, read as bun reads it, and the
+    /// status. `Err` when the output could not be read.
+    pub fn finish(mut self) -> Result<Output, HandBack> {
+        let read = self.read();
+        if read.as_ref().is_ok_and(|(_, overflow)| *overflow) || read.is_err() {
+            // SAFETY: the child has not been waited for, so the pid is its own.
+            unsafe { libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM) };
+        }
+        // Our ends of its pipes close here, before the wait.
+        drop(self.child.stdout.take());
+        drop(self.child.stderr.take());
+        let status = self.child.wait();
+        if let Some(writer) = self.writer.take() {
+            let _ = writer.join();
+        }
+        let ([out, err], overflow) = read.map_err(|_| HandBack)?;
+        let status = status.map_err(|_| HandBack)?;
+        Ok(Output {
+            status: if status.signal().is_some() { None } else { status.code() },
+            overflow,
+            stdout: String::from_utf8_lossy(&out).into_owned(),
+            stderr: String::from_utf8_lossy(&err).into_owned(),
+        })
     }
-    Ok(Output {
-        status: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+
+    /// Both streams until both end, or until one holds more than
+    /// `MAX_BUFFER` bytes (`true`).
+    fn read(&mut self) -> std::io::Result<([Vec<u8>; 2], bool)> {
+        let fds = [self.child.stdout.as_ref().map(|s| s.as_raw_fd()), self.child.stderr.as_ref().map(|s| s.as_raw_fd())];
+        let mut bufs = [Vec::new(), Vec::new()];
+        let mut open = [fds[0].is_some(), fds[1].is_some()];
+        let mut chunk = vec![0u8; READ];
+        while open[0] || open[1] {
+            let mut polled: Vec<(usize, libc::pollfd)> = (0..2)
+                .filter(|&i| open[i])
+                .map(|i| (i, libc::pollfd { fd: fds[i].unwrap_or(-1), events: libc::POLLIN, revents: 0 }))
+                .collect();
+            let mut raw: Vec<libc::pollfd> = polled.iter().map(|(_, p)| *p).collect();
+            // SAFETY: `raw` holds `raw.len()` pollfd structures.
+            let ready = unsafe { libc::poll(raw.as_mut_ptr(), raw.len() as libc::nfds_t, -1) };
+            if ready < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(err);
+            }
+            for ((i, _), p) in polled.iter_mut().zip(&raw) {
+                if p.revents == 0 {
+                    continue;
+                }
+                // SAFETY: `chunk` has room for `READ` bytes; the fd is open.
+                let n = unsafe { libc::read(p.fd, chunk.as_mut_ptr().cast(), READ) };
+                if n < 0 {
+                    let err = std::io::Error::last_os_error();
+                    if matches!(err.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) {
+                        continue;
+                    }
+                    return Err(err);
+                }
+                if n == 0 {
+                    open[*i] = false;
+                    continue;
+                }
+                bufs[*i].extend_from_slice(&chunk[..n as usize]);
+                if bufs[*i].len() > MAX_BUFFER {
+                    return Ok((bufs, true));
+                }
+            }
+        }
+        Ok((bufs, false))
+    }
 }

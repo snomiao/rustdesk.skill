@@ -122,6 +122,220 @@ pub fn number(x: f64) -> Option<String> {
     Some(format!("{sign}{body}"))
 }
 
+/// `String(x)` for every number: the fewest digits that read back as `x`,
+/// of those the nearest to `x`, and of two as near the one whose last digit
+/// is even (ECMAScript's Number::toString, as JavaScriptCore does it; held
+/// against bun by rs/src/compare.rs). For what the binary has to write
+/// after it has acted, where it cannot hand back.
+pub fn number_exact(x: f64) -> String {
+    if x.is_nan() {
+        return "NaN".into();
+    }
+    if x == 0.0 {
+        return "0".into();
+    }
+    if x < 0.0 {
+        return format!("-{}", number_exact(-x));
+    }
+    if x.is_infinite() {
+        return "Infinity".into();
+    }
+    // Rust's shortest digits have the fewest digits, but where two are as
+    // near it may take the other one; its neighbours decide.
+    let shortest = format!("{x:e}");
+    let (mantissa, exponent) = shortest.split_once('e').expect("{:e} writes an exponent");
+    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let exponent: i32 = exponent.parse().expect("{:e} writes an integer exponent");
+    let k = digits.len() as u32;
+    let s: u64 = digits.parse().expect("at most 17 digits");
+    let p = exponent - k as i32 + 1;
+    let lowest = 10u64.pow(k - 1);
+    let reads_back = |c: u64| (lowest..lowest * 10).contains(&c) && format!("{c}e{p}").parse::<f64>().ok() == Some(x);
+    // The exact value of x, all its digits, and the power of ten of the first.
+    let exact = format!("{x:.1100e}");
+    let (exact_mantissa, exact_exponent) = exact.split_once('e').expect("{:e} writes an exponent");
+    let exact_digits: String = exact_mantissa.chars().filter(|c| *c != '.').collect();
+    let exact_exponent: i32 = exact_exponent.parse().expect("an integer exponent");
+    // How x compares with (c + 0.5) × 10^p, half way between c and c + 1.
+    let against_half = |c: u64| -> std::cmp::Ordering {
+        let half = format!("{}5", c);
+        // (c·10 + 5) × 10^(p−1) has its first digit at 10^exponent.
+        if exact_exponent != exponent {
+            return exact_exponent.cmp(&exponent);
+        }
+        let half = format!("{half:0<width$}", width = exact_digits.len());
+        exact_digits.as_str().cmp(half.as_str())
+    };
+    let mut best = None;
+    for c in [s.wrapping_sub(1), s, s + 1] {
+        if !reads_back(c) {
+            continue;
+        }
+        best = Some(match best {
+            None => c,
+            Some(b) => match against_half(b) {
+                std::cmp::Ordering::Greater => c,
+                std::cmp::Ordering::Less => b,
+                std::cmp::Ordering::Equal if b % 2 == 0 => b,
+                std::cmp::Ordering::Equal => c,
+            },
+        });
+    }
+    let digits = best.unwrap_or(s).to_string();
+    let k = digits.len() as i32;
+    let n = exponent + 1;
+    if k <= n && n <= 21 {
+        format!("{digits}{}", "0".repeat((n - k) as usize))
+    } else if 0 < n && n <= 21 {
+        format!("{}.{}", &digits[..n as usize], &digits[n as usize..])
+    } else if -6 < n && n <= 0 {
+        format!("0.{}{digits}", "0".repeat((-n) as usize))
+    } else {
+        let e = n - 1;
+        let e = if e < 0 { format!("-{}", -e) } else { format!("+{e}") };
+        if k == 1 {
+            format!("{digits}e{e}")
+        } else {
+            format!("{}.{}e{e}", &digits[..1], &digits[1..])
+        }
+    }
+}
+
+/// `Number(text)` for a string: JavaScript's StringToNumber (white space
+/// around, empty is 0, `Infinity`, `0x`/`0o`/`0b` without a sign, decimal
+/// literals with an exponent; anything else is NaN).
+pub fn string_to_number(text: &str) -> f64 {
+    let t = trim(text);
+    if t.is_empty() {
+        return 0.0;
+    }
+    let bytes = t.as_bytes();
+    if bytes.len() > 2 && bytes[0] == b'0' {
+        let radix = match bytes[1] {
+            b'x' | b'X' => 16,
+            b'o' | b'O' => 8,
+            b'b' | b'B' => 2,
+            _ => 0,
+        };
+        if radix != 0 {
+            return integer_in_radix(&t[2..], radix);
+        }
+    }
+    let (sign, rest) = match bytes[0] {
+        b'+' => (1.0, &t[1..]),
+        b'-' => (-1.0, &t[1..]),
+        _ => (1.0, t),
+    };
+    if rest == "Infinity" {
+        return sign * f64::INFINITY;
+    }
+    // StrUnsignedDecimalLiteral: digits [. digits] | . digits, then [eE][+-]digits.
+    let b = rest.as_bytes();
+    let mut at = 0;
+    let whole = b.iter().take_while(|c| c.is_ascii_digit()).count();
+    at += whole;
+    let mut fraction = 0;
+    if b.get(at) == Some(&b'.') {
+        at += 1;
+        fraction = b[at..].iter().take_while(|c| c.is_ascii_digit()).count();
+        at += fraction;
+    }
+    if whole + fraction == 0 {
+        return f64::NAN;
+    }
+    if matches!(b.get(at), Some(b'e' | b'E')) {
+        at += 1;
+        if matches!(b.get(at), Some(b'+' | b'-')) {
+            at += 1;
+        }
+        let exponent = b[at..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if exponent == 0 {
+            return f64::NAN;
+        }
+        at += exponent;
+    }
+    if at != b.len() {
+        return f64::NAN;
+    }
+    // Rust reads a decimal literal correctly rounded, as JavaScript does.
+    match rest.parse::<f64>() {
+        Ok(value) => sign * value,
+        Err(_) => f64::NAN,
+    }
+}
+
+/// The value of `digits` in base 2, 8 or 16, rounded to the nearest double
+/// (half to even), or NaN when one is not a digit there.
+fn integer_in_radix(digits: &str, radix: u32) -> f64 {
+    let width = radix.trailing_zeros();
+    let mut bits: Vec<bool> = Vec::with_capacity(digits.len() * width as usize);
+    for c in digits.chars() {
+        let Some(value) = c.to_digit(radix) else { return f64::NAN };
+        for at in (0..width).rev() {
+            bits.push(value >> at & 1 == 1);
+        }
+    }
+    let Some(first) = bits.iter().position(|b| *b) else { return 0.0 };
+    let bits = &bits[first..];
+    if bits.len() <= 53 {
+        return bits.iter().fold(0u64, |n, b| n << 1 | u64::from(*b)) as f64;
+    }
+    // 53 bits kept, the next one and whether any after it is set decide.
+    let mut kept = bits[..53].iter().fold(0u64, |n, b| n << 1 | u64::from(*b));
+    let half = bits[53];
+    let beyond = bits[54..].iter().any(|b| *b);
+    if half && (beyond || kept & 1 == 1) {
+        kept += 1;
+    }
+    let scale = (bits.len() - 53) as i32;
+    if scale > 1100 {
+        return f64::INFINITY;
+    }
+    // kept < 2^54, times a power of two: exact until it is too large.
+    (kept as f64) * 2f64.powi(scale)
+}
+
+/// `Math.max(a, b)`: NaN if either is.
+pub fn math_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a == b {
+        // Math.max(-0, 0) is 0.
+        if a.is_sign_negative() {
+            b
+        } else {
+            a
+        }
+    } else {
+        a.max(b)
+    }
+}
+
+/// `text.toLowerCase()` for looking up one of the fixed texts the
+/// TypeScript searches the screen for, which are all ASCII, kana and CJK:
+/// a character whose lower case is not certain here (`lowercase_unsure`)
+/// becomes U+FFFF, which none of those texts holds. Whatever the runtime
+/// makes of such a character (σ or ς, or a letter of its own script), it is
+/// none of them either, and no other character's lower case depends on
+/// what is around it, so whether one of them is found does not change.
+pub fn lower_for_fixed(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if lowercase_unsure(c) {
+            out.push('\u{ffff}');
+        } else {
+            out.extend(c.to_lowercase());
+        }
+    }
+    out
+}
+
+/// Whether `text` is made of what `lower_for_fixed` relies on: ASCII, kana
+/// and CJK ideographs.
+pub fn fixed_alphabet(text: &str) -> bool {
+    text.chars().all(|c| c.is_ascii() || matches!(c as u32, 0x3000..=0x30ff | 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff))
+}
+
 /// `x.toFixed(2)`, or `None` for a number of 1e21 or more (String(x) then).
 pub fn to_fixed_2(x: f64) -> Option<String> {
     if x.is_nan() {
@@ -215,6 +429,25 @@ pub fn slice_utf16(text: &str, units: usize) -> Option<&str> {
     Some(text)
 }
 
+/// `text.slice(0, units)` as bun prints it: half of a character cut in two
+/// is a lone surrogate, which it writes as U+FFFD.
+pub fn slice_utf16_lossy(text: &str, units: usize) -> String {
+    let mut out = String::new();
+    let mut count = 0;
+    for c in text.chars() {
+        if count >= units {
+            break;
+        }
+        if count + c.len_utf16() > units {
+            out.push('\u{fffd}');
+            break;
+        }
+        out.push(c);
+        count += c.len_utf16();
+    }
+    out
+}
+
 // ── node's path.posix ────────────────────────────────────────────────────────
 
 /// `path.posix.normalize(p)`
@@ -306,6 +539,76 @@ mod tests {
         }
         assert_eq!(number(0.1 + 0.2), None);
         assert_eq!(number(1459077941253781.2), None);
+    }
+
+    #[test]
+    fn every_number_as_javascript_writes_it() {
+        for (x, text) in [
+            (0.0, "0"),
+            (-0.0, "0"),
+            (1459077941253781.2, "1459077941253781.2"),
+            (0.1 + 0.2, "0.30000000000000004"),
+            (123456789012345680000.0, "123456789012345680000"),
+            (1e21, "1e+21"),
+            (-1e-7, "-1e-7"),
+            (5e-324, "5e-324"),
+            (1.7976931348623157e308, "1.7976931348623157e+308"),
+            (f64::INFINITY, "Infinity"),
+            (f64::NEG_INFINITY, "-Infinity"),
+            (9007199254740993.0, "9007199254740992"),
+            (2f64.powi(60), "1152921504606847000"),
+        ] {
+            assert_eq!(number_exact(x), text, "{x:e}");
+        }
+        for x in [0.5, 1280.0, 1e20, 123456789012345.0, 0.000001, 1.5e-7, 2.5, -0.5] {
+            assert_eq!(Some(number_exact(x)), number(x), "{x}");
+        }
+    }
+
+    #[test]
+    fn strings_read_as_numbers() {
+        for (text, x) in [
+            ("", 0.0),
+            ("  \n", 0.0),
+            (" 12 ", 12.0),
+            ("1e3", 1000.0),
+            ("0x10", 16.0),
+            ("0X1f", 31.0),
+            ("0o17", 15.0),
+            ("0b101", 5.0),
+            ("-0x10", f64::NAN),
+            ("Infinity", f64::INFINITY),
+            ("-Infinity", f64::NEG_INFINITY),
+            ("infinity", f64::NAN),
+            ("1.", 1.0),
+            (".5", 0.5),
+            (".", f64::NAN),
+            ("1_0", f64::NAN),
+            ("+5", 5.0),
+            ("--5", f64::NAN),
+            ("1e", f64::NAN),
+            ("0x", f64::NAN),
+            ("\u{feff}7\u{3000}", 7.0),
+            ("0x20000000000001", 9007199254740992.0),
+            ("0x20000000000003", 9007199254740996.0),
+        ] {
+            let got = string_to_number(text);
+            assert!(got == x || (got.is_nan() && x.is_nan()), "{text:?}: {got}");
+        }
+        assert!(string_to_number("-0").is_sign_negative());
+    }
+
+    #[test]
+    fn lower_case_for_the_fixed_texts() {
+        assert_eq!(lower_for_fixed("ΣΥΝΔΕΣΗ OK"), "\u{ffff}υνδε\u{ffff}η ok");
+        assert_eq!(lower_for_fixed("İD"), "i\u{307}d");
+        assert!(fixed_alphabet("リモートID パスワードが必要です 記憶する 确定 確定 Remote ID"));
+        assert!(!fixed_alphabet("σ"));
+        assert_eq!(slice_utf16_lossy("ab😀c", 3), "ab\u{fffd}");
+        assert_eq!(slice_utf16_lossy("ab😀c", 4), "ab😀");
+        assert_eq!(slice_utf16_lossy("ab", 200), "ab");
+        assert!(math_max(40.0, f64::NAN).is_nan());
+        assert_eq!(math_max(40.0, 12.0), 40.0);
     }
 
     #[test]

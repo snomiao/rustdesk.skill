@@ -9,7 +9,6 @@
 //! the output goes out as the TypeScript writes it, and every outcome has to
 //! be answered as the TypeScript answers it.
 
-use std::io::Write as _;
 use std::path::PathBuf;
 
 use crate::runtime::Machine;
@@ -49,17 +48,23 @@ pub struct Run<'m> {
     live: bool,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
+    /// What stdout holds came from `process.stdout.write` (printJson), whose
+    /// failure bun reports with a stack trace and exit code 1; otherwise
+    /// from console.log, whose failure bun ignores.
+    strict: bool,
+    /// After the first act, printJson could not write: the error.
+    pub stdout_failed: Option<std::io::Error>,
     /// Files this attempt made that the TypeScript would make under another
     /// name (the OCR's PNG is named for the process): taken away again if
     /// the invocation is handed back.
     made: Vec<PathBuf>,
     /// `viewport()`'s cache, as in src/pw.ts.
-    pub viewport: Option<(f64, f64)>,
+    pub viewport: Option<crate::pw::Viewport>,
 }
 
 impl<'m> Run<'m> {
     pub fn new(machine: &'m Machine) -> Run<'m> {
-        Run { machine, live: false, stdout: Vec::new(), stderr: Vec::new(), made: Vec::new(), viewport: None }
+        Run { machine, live: false, stdout: Vec::new(), stderr: Vec::new(), strict: false, stdout_failed: None, made: Vec::new(), viewport: None }
     }
 
     pub fn is_live(&self) -> bool {
@@ -78,16 +83,45 @@ impl<'m> Run<'m> {
     }
 
     fn flush(&mut self) {
-        // A reader that has gone away is not an error, as it is not for bun.
+        // console.error's failures are ignored, as bun ignores them.
         if !self.stderr.is_empty() {
-            let _ = std::io::stderr().write_all(&self.stderr);
+            let _ = write_fd(2, &self.stderr);
             self.stderr.clear();
         }
         if !self.stdout.is_empty() {
-            let mut out = std::io::stdout().lock();
-            let _ = out.write_all(&self.stdout).and_then(|()| out.flush());
+            if let Err(err) = write_fd(1, &self.stdout) {
+                if self.strict && self.stdout_failed.is_none() {
+                    self.stdout_failed = Some(err);
+                }
+            }
             self.stdout.clear();
         }
+    }
+
+    /// The end of a command that has not acted: what it printed goes out.
+    /// When stdout cannot take what printJson wrote (its reader has gone,
+    /// the disk is full), bun fails in its own words, with a stack trace:
+    /// the invocation goes back, and the JavaScript fails the same way.
+    pub fn finish(&mut self) -> Result<(), crate::HandBack> {
+        if self.live {
+            return Ok(());
+        }
+        if self.strict && !self.stdout.is_empty() {
+            // Into one file, stderr comes first, as the TypeScript writes it;
+            // into two, the order cannot be seen, and stdout goes first so
+            // that nothing is out yet when it fails.
+            if same_file(1, 2) && !self.stderr.is_empty() {
+                let _ = write_fd(2, &self.stderr);
+                self.stderr.clear();
+            }
+            if write_fd(1, &self.stdout).is_err() {
+                self.undo();
+                return Err(crate::HandBack);
+            }
+            self.stdout.clear();
+        }
+        self.commit();
+        Ok(())
     }
 
     /// `console.error(text)`
@@ -99,12 +133,18 @@ impl<'m> Run<'m> {
         }
     }
 
-    /// `process.stdout.write(text)`
+    /// `console.log(text)` of every line in `text`
     pub fn write(&mut self, text: &str) {
         self.stdout.extend_from_slice(text.as_bytes());
         if self.live {
             self.flush();
         }
+    }
+
+    /// `process.stdout.write(text)` of printJson
+    pub fn print_json(&mut self, text: &str) {
+        self.strict = true;
+        self.write(text);
     }
 
     /// A file of the attempt's own, to take away if it is handed back.
@@ -120,4 +160,57 @@ impl<'m> Run<'m> {
             let _ = std::fs::remove_file(path);
         }
     }
+}
+
+/// All of `bytes` to the file descriptor, or the error of the write that
+/// failed.
+fn write_fd(fd: i32, mut bytes: &[u8]) -> std::io::Result<()> {
+    while !bytes.is_empty() {
+        // SAFETY: `bytes` is valid for its length.
+        let n = unsafe { libc::write(fd, bytes.as_ptr().cast(), bytes.len()) };
+        if n < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(err);
+        }
+        bytes = &bytes[n as usize..];
+    }
+    Ok(())
+}
+
+fn stat(fd: i32) -> Option<libc::stat> {
+    // SAFETY: fstat fills the structure it is given.
+    unsafe {
+        let mut st: libc::stat = std::mem::zeroed();
+        (libc::fstat(fd, &mut st) == 0).then_some(st)
+    }
+}
+
+/// Whether stdout and stderr are the same file (one pipe, one terminal).
+fn same_file(a: i32, b: i32) -> bool {
+    match (stat(a), stat(b)) {
+        (Some(a), Some(b)) => a.st_dev == b.st_dev && a.st_ino == b.st_ino,
+        _ => false,
+    }
+}
+
+/// Whether stdout is seen not to take what is written to it: not open, a
+/// pipe or socket that nothing reads any more, or Linux's /dev/full.
+pub fn stdout_unwritable() -> bool {
+    let Some(st) = stat(1) else { return true };
+    let kind = st.st_mode & libc::S_IFMT;
+    if kind == libc::S_IFIFO || kind == libc::S_IFSOCK {
+        let mut poll = libc::pollfd { fd: 1, events: libc::POLLOUT, revents: 0 };
+        // SAFETY: one pollfd structure, no waiting.
+        if unsafe { libc::poll(&mut poll, 1, 0) } > 0 && poll.revents & (libc::POLLERR | libc::POLLHUP) != 0 {
+            return true;
+        }
+    }
+    #[cfg(target_os = "linux")]
+    if kind == libc::S_IFCHR && st.st_rdev == libc::makedev(1, 7) {
+        return true;
+    }
+    false
 }

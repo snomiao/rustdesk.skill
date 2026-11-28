@@ -186,7 +186,11 @@ fn write(run: &Run, file: &str, text: &str) -> R<()> {
     }
     use std::io::Write as _;
     let mut out = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(file).map_err(|_| Stop::HandBack)?;
-    out.write_all(text.as_bytes()).map_err(|_| Stop::HandBack)
+    out.write_all(text.as_bytes()).map_err(|err| match err.raw_os_error() {
+        // A full disk, in bun's words.
+        Some(libc::ENOSPC) => Stop::error("ENOSPC: no space left on device, write"),
+        _ => Stop::HandBack,
+    })
 }
 
 /// `setPassword(id, pw)`: the store read again, the password set, all of it

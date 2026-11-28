@@ -45,10 +45,16 @@ fn git(run: &mut Run, args: &[&str]) -> R<(Option<i32>, String)> {
         Found::Missing => return Ok((None, String::new())),
     };
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-    match proc::run(run.machine, &program, &args, None, None) {
-        Ok(output) => Ok((output.status, output.stdout)),
-        Err(_) => Err(Stop::HandBack),
+    let output = match proc::start(run.machine, &program, &args, None, None) {
+        // Any error: no status, so `status !== 0`.
+        Err(_) => return Ok((None, String::new())),
+        Ok(started) => started.finish().map_err(|_| Stop::HandBack)?,
+    };
+    // Past bun's buffer, before the first act: back.
+    if output.overflow && !run.is_live() {
+        return Err(Stop::HandBack);
     }
+    Ok((output.status, output.stdout))
 }
 
 /// `gitDefaultSessionName()`

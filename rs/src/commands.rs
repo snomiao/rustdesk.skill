@@ -6,7 +6,7 @@ use std::fs;
 
 use crate::args::{Backend, Command};
 use crate::js;
-use crate::ocr::{self, OcrBox};
+use crate::ocr::{self, JsBox};
 use crate::pw;
 use crate::run::{Run, Stop, R};
 use crate::store;
@@ -20,7 +20,7 @@ pub fn run(run: &mut Run, command: &Command) -> R<()> {
     match command {
         Command::List => list(run),
         Command::Scroll { dy } => {
-            let dy = pw::coordinate(*dy)?;
+            let dy = pw::coordinate(run, *dy)?;
             pw::pw(run, &["mousewheel", "0", &dy], false).map(drop)
         }
         Command::Key { chord } => pw::press_key(run, chord),
@@ -50,7 +50,7 @@ fn list(run: &mut Run) -> R<()> {
         let items: Vec<String> = ids.iter().map(|id| format!("  {}", js::json_string(id))).collect();
         format!("[\n{}\n]", items.join(",\n"))
     };
-    run.write(&format!("{text}\n"));
+    run.print_json(&format!("{text}\n"));
     Ok(())
 }
 
@@ -96,18 +96,18 @@ const PASSWORD_DIALOG: [&str; 4] = ["パスワードが必要です", "Password 
 const HOME_SCREEN: [&str; 5] = ["リモートID", "Remote ID", "リモートデスクトップ", "Control Remote", "Remote Desktop"];
 
 /// `passwordDialogPresent(boxes)`
-pub fn password_dialog_present(boxes: &[OcrBox]) -> R<bool> {
-    Ok(ocr::find_any(boxes, &PASSWORD_DIALOG)?.is_some())
+pub fn password_dialog_present(boxes: &[JsBox]) -> R<bool> {
+    Ok(ocr::find_any_js(boxes, &PASSWORD_DIALOG)?.is_some())
 }
 
 /// `homeScreenPresent(boxes)`
-pub fn home_screen_present(boxes: &[OcrBox]) -> R<bool> {
-    Ok(ocr::find_any(boxes, &HOME_SCREEN)?.is_some())
+pub fn home_screen_present(boxes: &[JsBox]) -> R<bool> {
+    Ok(ocr::find_any_js(boxes, &HOME_SCREEN)?.is_some())
 }
 
 /// `detectConnected()`
 pub fn detect_connected(run: &mut Run) -> R<bool> {
-    let boxes = ocr::ocr(run, None, "ja,en")?;
+    let boxes = ocr::ocr_js(run)?;
     if password_dialog_present(&boxes)? || home_screen_present(&boxes)? {
         return Ok(false);
     }
@@ -119,7 +119,7 @@ fn status(run: &mut Run) -> R<()> {
     let on = pw::on_rustdesk(run)?;
     let connected = if on { detect_connected(run)? } else { false };
     let url = if on { "rustdesk.com/web" } else { "" };
-    run.write(&format!("{{\n  \"onRustdesk\": {on},\n  \"connected\": {connected},\n  \"url\": \"{url}\"\n}}\n"));
+    run.print_json(&format!("{{\n  \"onRustdesk\": {on},\n  \"connected\": {connected},\n  \"url\": \"{url}\"\n}}\n"));
     Ok(())
 }
 
@@ -128,7 +128,7 @@ fn ocr_command(run: &mut Run, json: bool, lang: &str, backend: Option<Backend>) 
     let boxes = ocr::ocr(run, backend, lang)?;
     if json {
         let text = ocr::boxes_json(&boxes)?;
-        run.write(&format!("{text}\n"));
+        run.print_json(&format!("{text}\n"));
         return Ok(());
     }
     let mut lines = String::new();
@@ -161,7 +161,7 @@ fn click(run: &mut Run, query: &str, nth: Option<u32>, contains: bool, backend: 
         ));
     }
     // Worked out before the click, which cannot be taken back.
-    let clicked = format!("[rustdesk-skill] clicked \"{}\" @ {},{}", found.text, pw::coordinate(found.x)?, pw::coordinate(found.y)?);
+    let clicked = format!("[rustdesk-skill] clicked \"{}\" @ {},{}", found.text, pw::coordinate(run, found.x)?, pw::coordinate(run, found.y)?);
     let (cx, cy) = ocr::box_center(&found);
     pw::click_screenshot_px(run, cx, cy)?;
     run.error_line(&clicked);
@@ -175,9 +175,11 @@ fn paste(run: &mut Run, text: &str) -> R<()> {
     let (name, args): (&str, &[&str]) = if mac { ("pbcopy", &[]) } else { ("xclip", &["-selection", "clipboard"]) };
     let output = match proc::find(run.machine, name)? {
         Found::Program(program) => {
-            run.commit();
             let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-            Some(proc::run(run.machine, &program, &args, None, Some(text.as_bytes())).map_err(|_| Stop::HandBack)?)
+            // One that cannot be started has set nothing: bun's words.
+            let started = proc::start(run.machine, &program, &args, None, Some(text.as_bytes())).map_err(|_| Stop::HandBack)?;
+            run.commit();
+            Some(started.finish().map_err(|_| Stop::HandBack)?)
         }
         // pbcopy's message would hold bun's text for the spawn error.
         Found::Missing if mac => return Err(Stop::HandBack),
@@ -186,8 +188,12 @@ fn paste(run: &mut Run, text: &str) -> R<()> {
     let failed = output.as_ref().is_none_or(|output| output.status != Some(0));
     if failed {
         if mac {
-            let stderr = output.map(|o| o.stderr).unwrap_or_default();
-            let what = if stderr.is_empty() { "undefined".to_string() } else { stderr };
+            // `res.stderr || res.error?.message`
+            let what = match &output {
+                Some(output) if !output.stderr.is_empty() => output.stderr.clone(),
+                Some(output) => output.error_message("pbcopy").unwrap_or_else(|| "undefined".into()),
+                None => "undefined".into(),
+            };
             return Err(Stop::error(format!("pbcopy failed: {what}")));
         }
         return Err(Stop::error("clipboard set failed (need xclip on Linux)"));

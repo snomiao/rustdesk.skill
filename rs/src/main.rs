@@ -30,6 +30,10 @@ mod js;
 #[cfg(unix)]
 mod json;
 #[cfg(unix)]
+mod jssort;
+#[cfg(unix)]
+mod jsv;
+#[cfg(unix)]
 mod ocr;
 #[cfg(unix)]
 mod proc;
@@ -81,7 +85,7 @@ fn answer(args: &[String]) {
         let command = args::recognise(args).ok_or(HandBack)?;
         let machine = runtime::machine()?;
         let mut run = Run::new(&machine);
-        let code = match commands::run(&mut run, &command) {
+        let mut code = match commands::run(&mut run, &command) {
             Ok(()) => 0,
             Err(Stop::Exit(code, message)) => {
                 if let Some(message) = message {
@@ -91,10 +95,12 @@ fn answer(args: &[String]) {
             }
             Err(Stop::HandBack) if run.is_live() => {
                 // Meant not to happen: everything the binary does not
-                // imitate is looked for before the first step that acts.
-                run.error_line(
-                    "[rustdesk-skill] stopped at something this build does not handle; run it again with RUSTDESK_SKILL_NO_NATIVE=1",
-                );
+                // imitate is looked for before the first step that acts,
+                // and every outcome of what comes after it is answered.
+                // What is left (rs/parity/README or the ledger names it) is
+                // stopped without another step; running it again would
+                // repeat what was done.
+                run.error_line("[rustdesk-skill] stopped: this build does not handle what it met after acting on the page; nothing further was done");
                 1
             }
             Err(Stop::HandBack) => {
@@ -102,11 +108,30 @@ fn answer(args: &[String]) {
                 return Err(HandBack);
             }
         };
-        // Printing the answer is the point of no return too.
-        run.commit();
+        // Printing the answer is the point of no return too; printJson that
+        // cannot write before then goes back.
+        run.finish()?;
+        if let Some(err) = run.stdout_failed.take() {
+            // After acting: bun's report of the failed write, without the
+            // stack trace and the version line it adds.
+            run.error_line(&bun_write_error(&err));
+            code = 1;
+        }
         Ok(code)
     });
     if let Some(code) = outcome {
         std::process::exit(code);
     }
+}
+
+/// The first lines of bun's report of a write that failed.
+#[cfg(unix)]
+fn bun_write_error(err: &std::io::Error) -> String {
+    let (code, text) = match err.raw_os_error() {
+        Some(libc::EPIPE) => ("EPIPE", "broken pipe"),
+        Some(libc::ENOSPC) => ("ENOSPC", "no space left on device"),
+        _ => return format!("{err}"),
+    };
+    let errno = err.raw_os_error().unwrap_or(0);
+    format!("{code}: {text}, write\n syscall: \"write\",\n   errno: -{errno},\n    code: \"{code}\"\n")
 }
