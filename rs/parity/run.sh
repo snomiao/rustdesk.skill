@@ -64,9 +64,17 @@ if [ "${PARITY_NO_GIT:-}" = 1 ]; then
   # bun for the TypeScript and for the binary's hand-back; the stand-ins
   # start node by its full path.
   mkdir -p "$TMPDIR/bun"
-  ln -s "$(command -v bun)" "$TMPDIR/bun/bun"
+  bun=$(command -v bun)
   bun_on_path=$TMPDIR/bun
-  if command -v cygpath > /dev/null 2>&1; then bun_on_path=$(cygpath -u "$bun_on_path"); fi
+  if command -v cygpath > /dev/null 2>&1; then
+    # A Windows program finds bun only as bun.exe, and Git Bash's ln -s
+    # would copy it: a hard link, or a copy where that cannot be made.
+    case $bun in *.exe) ;; *) bun=$bun.exe ;; esac
+    ln "$bun" "$TMPDIR/bun/bun.exe" 2> /dev/null || cp "$bun" "$TMPDIR/bun/bun.exe"
+    bun_on_path=$(cygpath -u "$bun_on_path")
+  else
+    ln -s "$bun" "$TMPDIR/bun/bun"
+  fi
   PATH="$shims_on_path:$bun_on_path"
 else
   PATH="$shims_on_path:$PATH"

@@ -5664,6 +5664,7 @@
    "after": [
     "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
    ],
+   "capture": "files",
    "handback": {
     "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
    },
@@ -7113,6 +7114,473 @@
    "skip": {
     "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
    }
+  },
+  {
+   "name": "x list: HOME with a trailing slash",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "HOME": "<HOME>/"
+   },
+   "setup": [
+    "mkdir -p <HOME>/.config/rustdesk-skill && printf '%s' '[\"1\"]' > <HOME>/.config/rustdesk-skill/recents.json"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x list: HOME relative",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "HOME": "rel"
+   },
+   "setup": [
+    "mkdir -p rel/.config/rustdesk-skill && printf '[\"r\"]' > rel/.config/rustdesk-skill/recents.json"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x list: an id of 10,000 characters",
+   "args": [
+    "list"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "setup": [
+    "mkdir -p <HOME>/.config/rustdesk-skill && printf '%s' '[\"9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999\"]' > <HOME>/.config/rustdesk-skill/recents.json"
+   ],
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x type: 10,000 characters",
+   "args": [
+    "type",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x click: Cyrillic in another case",
+   "args": [
+    "click",
+    "ПРИВЕТ мир"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"boxes\":[{\"text\":\"привет МИР\",\"confidence\":0.98,\"x1\":1,\"y1\":2,\"x2\":4,\"y2\":6}]}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x click: blanks only with --contains",
+   "args": [
+    "click",
+    "  ",
+    "--contains"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"boxes\":[{\"text\":\"OK\",\"confidence\":0.98,\"x1\":0,\"y1\":0,\"x2\":20,\"y2\":10},{\"text\":\"Cancel\",\"confidence\":0.98,\"x1\":30,\"y1\":0,\"x2\":70,\"y2\":10},{\"text\":\"ok \",\"confidence\":0.98,\"x1\":0,\"y1\":50,\"x2\":21,\"y2\":61},{\"text\":\"Ärger ÜBER\",\"confidence\":0.98,\"x1\":100,\"y1\":100,\"x2\":150,\"y2\":110},{\"text\":\"接続する\",\"confidence\":0.98,\"x1\":200,\"y1\":200,\"x2\":260,\"y2\":220}]}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x click: a box text with blanks of other scripts",
+   "args": [
+    "click",
+    "ok"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"boxes\":[{\"text\":\"　OK \",\"confidence\":0.98,\"x1\":1,\"y1\":2,\"x2\":4,\"y2\":6}]}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: coordinates wider than their padding",
+   "args": [
+    "ocr"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"boxes\":[{\"text\":\"wide\",\"confidence\":0.98,\"x1\":123456,\"y1\":-99999,\"x2\":223455,\"y2\":-101233}]}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: a text that is empty",
+   "args": [
+    "ocr",
+    "--json"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"boxes\":[{\"text\":\"\",\"confidence\":0.98,\"x1\":1,\"y1\":1,\"x2\":41,\"y2\":21}]}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: a member given twice in a box",
+   "args": [
+    "ocr",
+    "--json"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"out\":\"[{\\\"text\\\": \\\"a\\\", \\\"text\\\": \\\"b\\\", \\\"x1\\\": 1, \\\"x1\\\": 2, \\\"confidence\\\": 0.5, \\\"confidence\\\": \\\"x\\\"}]\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: a box with __proto__",
+   "args": [
+    "ocr",
+    "--json"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"out\":\"[{\\\"__proto__\\\": {\\\"text\\\": \\\"p\\\"}, \\\"text\\\": \\\"own\\\", \\\"x1\\\": 3}]\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: output with blanks around",
+   "args": [
+    "ocr"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"out\":\" \\r\\n [ ] \\n\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x ocr: output with a byte order mark",
+   "args": [
+    "ocr"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_OCR": "{\"out\":\"\\\\xef\\\\xbb\\\\xbf[]\"}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x key: a tab inside the chord",
+   "args": [
+    "key",
+    "ctrl+\tc\n"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x key: a modifier in capitals and a key in another script",
+   "args": [
+    "key",
+    "SHIFT+ä"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x session: RDS_SESSION_NAME of Japanese only",
+   "args": [
+    "scroll",
+    "1"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "日本",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x pw: RDS_PW_BIN of JavaScript blanks only",
+   "args": [
+    "scroll",
+    "1"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": " 　"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it finds playwright-cli on PATH, and on Windows the runtime never runs rs/parity/run.sh's stand-in there (a shell script)"
+   }
+  },
+  {
+   "name": "x pw: RDS_PW_BIN from .env.local",
+   "args": [
+    "scroll",
+    "1"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": null
+   },
+   "files": {
+    ".env.local": "RDS_PW_BIN=node <REPO>/rs/parity/shim.mjs pw\n"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x status: an address that is an object",
+   "args": [
+    "status"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_PW": "{\"eval:url\":{\"out\":\"### Result\\n{\\\"href\\\": \\\"https://rustdesk.com/web/\\\"}\\n### Ran Playwright code\\n\"}}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x connect: RDS_PW_BROWSER of blanks",
+   "args": [
+    "c",
+    "1",
+    "pw",
+    "--new"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "RDS_PW_BROWSER": "   "
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   },
+   "skip": {
+    "win32": "it runs OCR, and on Windows the runtime never runs rs/parity/run.sh's python3 stand-in (a shell script): it would find the machine's own python3"
+   }
+  },
+  {
+   "name": "x screenshot: a file named in Japanese",
+   "args": [
+    "ss",
+    "スクショ 1.png"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'",
+    "cksum 'スクショ 1.png'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x move: far coordinates",
+   "args": [
+    "move",
+    "123456789012345",
+    "-123456789012345"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x move: a far coordinate on a retina screen",
+   "args": [
+    "move",
+    "123456789012345",
+    "1"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw",
+    "PARITY_PW": "{\"screenshot\":{\"png\":[2560,1440]}}"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": {
+    "win32": "every invocation goes back to the TypeScript on Windows (rs/src/main.rs)"
+   }
+  },
+  {
+   "name": "x scroll: a large negative fraction",
+   "args": [
+    "scroll",
+    "-999999999999999.999999"
+   ],
+   "env": {
+    "RDS_SESSION_NAME": "parity",
+    "RDS_PW_BIN": "node <REPO>/rs/parity/shim.mjs pw"
+   },
+   "after": [
+    "cat <ROOT>/calls.log 2>/dev/null || echo '(nothing was started)'"
+   ],
+   "handback": "it reads as -1e15: a number of that size is written in JavaScript's own way, not ported"
   }
  ]
 }

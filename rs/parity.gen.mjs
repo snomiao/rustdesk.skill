@@ -425,7 +425,10 @@ add("ocr: OCR fails silently", ["ocr"], { ...OCR, ocr: { code: 1 } });
 add("ocr: OCR is killed", ["ocr"], { ...OCR, ocr: { kill: "SIGTERM" }, skip: { win32: "no signals" } });
 add("ocr: OCR prints too much", ["ocr"], { ...OCR, ocr: { big: 2000000 }, back: "a program that prints more than a mebibyte: bun stops it and says so in its own words", late: true });
 add("ocr: no python3", ["ocr"], { ...OCR, env: { PARITY_NO_GIT: "1", PARITY_NO_OCR: "1" } });
-add("ocr: many boxes", ["ocr"], { ...OCR, ocr: { boxes: Array.from({ length: 400 }, (_, i) => pbox(`box ${i}`, i * 3, i * 2, 30 + (i % 7), 10, (i % 100) / 100)) } });
+// 400 lines of console.log: bun loses some of them into a pipe that is read
+// slowly (TypeScript against TypeScript differed here on a loaded machine),
+// so this one prints into files, where every line arrives.
+add("ocr: many boxes", ["ocr"], { ...OCR, capture: "files", ocr: { boxes: Array.from({ length: 400 }, (_, i) => pbox(`box ${i}`, i * 3, i * 2, 30 + (i % 7), 10, (i % 100) / 100)) } });
 add("ocr: the screenshot step fails", ["ocr"], { ...OCR, pw: { screenshot: { code: 1, err: "gone\n" } } });
 add("ocr: the PNG is left in the temp directory", ["ocr"], { ...OCR, after: ['ls "$TMPDIR"'] });
 
@@ -503,6 +506,33 @@ C("OCR fails on the way", ["c", "1", "pw"], { ocr: [{}, { code: 1, err: "ocr die
 C("a click fails on the way", ["c", "1", "pw"], { ...FLOW, pw: { mousedown: [{}, { code: 1, err: "click\n" }] } });
 C("without a session name", ["c", "1", "pw"], { env: { RDS_SESSION_NAME: null } });
 C("a password store in RDS_CONFIG_DIR from .env.local", ["c", "1"], { files: { ".env.local": "RDS_CONFIG_DIR=<ROOT>/c\n" }, setup: ["mkdir -p <ROOT>/c && printf '{\"1\": \"from-env-local\"}' > <ROOT>/c/passwords.json"], dir: "<ROOT>/c" });
+
+// ═══════════════════════════ more, aimed at what may have been missed ═══════════════════════════
+
+add("x list: HOME with a trailing slash", ["list"], { env: { HOME: "<HOME>/" }, setup: RECENTS('["1"]') });
+add("x list: HOME relative", ["list"], { env: { HOME: "rel" }, setup: ["mkdir -p rel/.config/rustdesk-skill && printf '[\"r\"]' > rel/.config/rustdesk-skill/recents.json"] });
+add("x list: an id of 10,000 characters", ["list"], { setup: RECENTS(JSON.stringify(["9".repeat(10000)])) });
+add("x type: 10,000 characters", ["type", "a".repeat(10000)]);
+add("x click: Cyrillic in another case", ["click", "ПРИВЕТ мир"], { ...OCR, ocr: { boxes: [pbox("привет МИР", 1, 2, 3, 4)] } });
+add("x click: blanks only with --contains", ["click", "  ", "--contains"], CLICK);
+add("x click: a box text with blanks of other scripts", ["click", "ok"], { ...OCR, ocr: { boxes: [pbox("　OK ", 1, 2, 3, 4)] } });
+add("x ocr: coordinates wider than their padding", ["ocr"], { ...OCR, ocr: { boxes: [pbox("wide", 123456, -99999, 99999, -1234)] } });
+add("x ocr: a text that is empty", ["ocr", "--json"], { ...OCR, ocr: { boxes: [pbox("", 1, 1)] } });
+add("x ocr: a member given twice in a box", ["ocr", "--json"], { ...OCR, ocr: { out: '[{"text": "a", "text": "b", "x1": 1, "x1": 2, "confidence": 0.5, "confidence": "x"}]' } });
+add("x ocr: a box with __proto__", ["ocr", "--json"], { ...OCR, ocr: { out: '[{"__proto__": {"text": "p"}, "text": "own", "x1": 3}]' } });
+add("x ocr: output with blanks around", ["ocr"], { ...OCR, ocr: { out: ' \r\n [ ] \n' } });
+add("x ocr: output with a byte order mark", ["ocr"], { ...OCR, ocr: { out: "\\xef\\xbb\\xbf[]" } });
+add("x key: a tab inside the chord", ["key", "ctrl+\tc\n"]);
+add("x key: a modifier in capitals and a key in another script", ["key", "SHIFT+ä"]);
+add("x session: RDS_SESSION_NAME of Japanese only", ["scroll", "1"], { env: { RDS_SESSION_NAME: "日本" } });
+add("x pw: RDS_PW_BIN of JavaScript blanks only", ["scroll", "1"], { env: { RDS_PW_BIN: " 　" }, needs: ["path"] });
+add("x pw: RDS_PW_BIN from .env.local", ["scroll", "1"], { env: { RDS_PW_BIN: null }, files: { ".env.local": `RDS_PW_BIN=${PW}\n` } });
+add("x status: an address that is an object", ["status"], { pw: URL('{"href": "https://rustdesk.com/web/"}'), ...OCR });
+add("x connect: RDS_PW_BROWSER of blanks", ["c", "1", "pw", "--new"], { env: { RDS_PW_BROWSER: "   " }, needs: ["ocr"] });
+add("x screenshot: a file named in Japanese", ["ss", "スクショ 1.png"], { after: ["cksum 'スクショ 1.png'"] });
+add("x move: far coordinates", ["move", "123456789012345", "-123456789012345"]);
+add("x move: a far coordinate on a retina screen", ["move", "123456789012345", "1"], { pw: { screenshot: { png: [2560, 1440] } } });
+add("x scroll: a large negative fraction", ["scroll", "-999999999999999.999999"], { back: "it reads as -1e15: a number of that size is written in JavaScript's own way, not ported" });
 
 // ═══════════════════════════ systems ═══════════════════════════
 //
